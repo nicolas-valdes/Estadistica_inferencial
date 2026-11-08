@@ -1,0 +1,353 @@
+---
+title: "Lectura 04"
+author: "Nicolás Valdés"
+date: "2026-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Cap 7: Poder estadístico
+
+## Script 7.1: graficación de una hipótesis nula bilateral (figura 7.1).
+```{r}
+library(ggpattern)
+library(ggpubr)
+
+# Definir los valores fijados en el enunciado
+n <- 36
+alfa <- 0.05
+media_nula <- 60
+sigma <- 12
+
+# Calcular el error estándar
+SE <- sigma / sqrt(n)
+
+# Graficar la distribución muestral de las medias si la hipótesis nula fuera verdadera
+
+# Primero, el gráfico base
+g_x_limites <- media_nula + c(-6.9, 5) * SE
+g <- ggplot() + xlim(g_x_limites) + ylim(c(0, 0.22))
+g <- g + labs(title = "Distribución muestral de las medias")
+g <- g + labs(x = "Tiempo de ejecución [s]", y = "Densidad")
+g <- g + theme_pubr()
+
+# Agregamos la hipótesis nula
+dist_0 <- stat_function(fun = dnorm, geom = "area",
+                        args = list(mean = media_nula, sd = SE),
+                        colour = "steelblue4", fill = "steelblue4", alpha = 0.2)
+g1 <- g + dist_0
+g1 <- g1 + geom_vline(xintercept = media_nula, colour = "steelblue4")
+
+# Calcular y colorear las regiones críticas de la hipótesis nula
+z_critico_inferior <- qnorm(alfa/2, mean = media_nula, sd = SE, lower.tail = TRUE)
+z_critico_superior <- qnorm(alfa/2, mean = media_nula, sd = SE, lower.tail = FALSE)
+
+g2 <- g1 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "steelblue4", alpha = 0.4)
+g2 <- g2 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "steelblue4", alpha = 0.4)
+
+# Mostrar el gráfico
+print(g2)
+```
+
+
+## Script 7.2: graficación del tamaño del efecto en una prueba de hipótesis bilateral (figura 7.2).
+```{r}
+# Definir los valores verdaderos, usualmente desconocidos
+media_verdadera <- 55.6
+delta <- media_nula - media_verdadera
+
+# Agregar la verdadera distribución muestral de las medias
+g3 <- g2 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         colour = "steelblue1", fill = "steelblue1", alpha = 0.2)
+g3 <- g3 + geom_vline(xintercept = media_verdadera, colour = "steelblue1")
+
+# Agregar anotación del tamaño del efecto y mostrar el gráfico que resulta
+x_ann <- c(media_verdadera, media_nula)
+y_ann <- c(dnorm(media_verdadera, mean = media_verdadera, sd = SE),
+           dnorm(media_nula, mean = media_nula, sd = SE))
+y_ann <- y_ann + 0.005
+g4 <- g3 + annotate("segment", x = x_ann[1], y = y_ann[1],
+                    xend = x_ann[2], yend = y_ann[2],
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "both", type = "open"))
+g4 <- g4 + annotate("text", x = sum(x_ann) / 2, y = y_ann[1] + 0.015,
+                    label = "delta", vjust = "top", parse = TRUE)
+print(g4)
+```
+
+
+
+## Script 7.3: cálculo y graficación de β y del poder estadístico para una prueba bilateral (figura 7.3).
+```{r}
+# Traspasar las regiones críticas a la verdadera distribución muestral de las medias
+g5 <- g3 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "steelblue1", alpha = 0.4)
+g5 <- g5 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "steelblue1", alpha = 0.4)
+g5 <- g5 + stat_function(fun = dnorm, geom = "area_pattern",
+                         args = list(mean = media_verdadera, sd = SE),
+                         xlim = c(z_critico_inferior, z_critico_superior),
+                         fill = "white", colour = "steelblue1", alpha = 0.3, 
+                         pattern_spacing = 0.15, pattern_density = 0.4, 
+                         pattern_fill = "steelblue1",pattern_colour = "steelblue1",
+                         pattern_angle = 45, pattern_alpha = 0.3)
+# Agregar anotación del poder y mostrar el nuevo gráfico 
+g5 <- g5 + annotate("text", x = 50, y = 0.1, label = "poder[inf]",
+                    vjust = "top", parse = TRUE)
+g5 <- g5 + annotate("text", x = 66.3, y = 0.04, label = "poder[sup]",
+                    vjust = "top", parse = TRUE)
+g5 <- g5 + annotate("text", x = sum(x_ann) / 2, y = y_ann[1] - 0.005,
+                    label = "beta", vjust = "top", parse = TRUE)
+g5 <- g5 + annotate("segment", x = 50, y = 0.087, xend = 52.5, yend = 0.02,
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "last", type = "open"))
+g5 <- g5 + annotate("segment", x = 65, y = 0.027, xend = 64.2, yend = 0.001,
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "last", type = "open"))
+g5 <- g5 + annotate("segment", x = sum(x_ann) / 2, y = y_ann[1] - 0.023,
+                    xend = 57, yend = 0.10,
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "last", type = "open"))
+print(g5)
+
+# Calcular y mostrar el poder
+poder_inf <- pnorm(z_critico_inferior, mean = media_verdadera, sd = SE, lower.tail = TRUE)
+poder_sup <- pnorm(z_critico_superior, mean = media_verdadera, sd = SE, lower.tail = FALSE)
+poder <- poder_inf + poder_sup
+cat("Poder = ", poder, "\n")
+
+# Calcular y mostrar la probabilidad de cometer un error tipo II
+beta <- 1 - poder
+cat("Beta = ", beta, "\n")
+```
+
+
+## Script 7.4: graficación de la relación entre potencia y tamaño del efecto (figura 7.5).
+```{r}
+library(ggpubr)
+library(pwr)
+library(tidyr)
+
+# Definir los valores del enunciado
+n <- 36
+alfa <- 0.05
+media_nula <- 60
+sigma <- 12
+
+# Definir tamaños del efecto
+medias_verdaderas <- seq(50, 70, 0.01)
+deltas <- medias_verdaderas - media_nula
+deltas_normalizados <- deltas / sigma
+
+# Definir función para calcular el poder de la prueba Z bilateral
+# y aplicar a los tamaños del efecto.
+f_pzb <- function(x) pwr.norm.test(x, n = n, sig.level = alfa,
+                                   alternative = "two.sided")[["power"]]
+poder_bilat <- sapply(deltas_normalizados, f_pzb)
+
+# Definir función para calcular el poder de la prueba Z con hipótesis alternativa
+# unilateral tipo "less" y aplicar a los tamaños del efecto.
+f_pzl <- function(x) pwr.norm.test(x, n = n, sig.level = alfa,
+                                   alternative = "less")[["power"]]
+poder_unilat <- sapply(deltas_normalizados, f_pzl)
+
+# Graficar estas curvas
+datos_anchos <- data.frame(deltas, poder_bilat, poder_unilat)
+datos_largos <- datos_anchos |>
+                pivot_longer(-deltas, names_to = "Tipo", values_to = "Poder")
+datos_largos[["Tipo"]] <- factor(datos_largos[["Tipo"]],
+                                 labels = c("Bilateral", "Unilateral"))
+g <- ggline(datos_largos, x = "deltas", y = "Poder", plot_type = "l", 
+            numeric.x.axis = TRUE, title = "Relación entre poder y tamaño del efecto",
+            xlab = "Delta [s]", color = "Tipo", palette = c("steelblue", "steelblue1"))
+g <- ggpar(g, legend = c(.85, .35))
+print(g)
+```
+
+
+## Script 7.5: graficación de la relación entre potencia y nivel de significación (figura 7.6).
+```{r}
+library(ggpubr)
+library(pwr)
+library(tidyr)
+
+# Definir los valores del enunciado
+n <- 36
+media_nula <- 60
+sigma <- 12
+
+# Definir el tamaño del efecto
+media_verdadera <- 55.6
+delta <- media_verdadera - media_nula
+deltas_normalizados <- delta / sigma
+
+# Definir los niveles de significación
+alfas <- seq(0.001, 0.15, 0.001)
+
+# Definir función para calcular el poder de la prueba Z bilateral
+# y aplicar a los niveles de significación.
+f_pzb <- function(x) pwr.norm.test(deltas_normalizados, n = n, sig.level = x,
+                                   alternative = "two.sided")[["power"]]
+poder_bilat <- sapply(alfas, f_pzb)
+
+# Definir función para calcular el poder de la prueba Z con hipótesis alternativa
+# unilateral tipo "less" y aplicar a los niveles de significación.
+f_pzl <- function(x) pwr.norm.test(deltas_normalizados, n = n, sig.level = x,
+                                   alternative = "less")[["power"]]
+poder_unilat <- sapply(alfas, f_pzl)
+
+# Graficar estas curvas
+datos_anchos <- data.frame(alfas, poder_bilat, poder_unilat)
+datos_largos <- datos_anchos |>
+                pivot_longer(-alfas, names_to = "Tipo", values_to = "Poder")
+datos_largos[["Tipo"]] <- factor(datos_largos[["Tipo"]],
+                                 labels = c("Bilateral", "Unilateral"))
+g <- ggline(datos_largos, x = "alfas", y = "Poder", plot_type = "l", numeric.x.axis = TRUE,
+            title = "Relación entre poder y nivel de significación",
+            xlab = "Nivel de significación",
+            color = "Tipo", palette = c("steelblue", "steelblue1"))
+g <- ggpar(g, legend = c(.85, .35))
+print(g)
+```
+
+
+## Script 7.6: graficación de la relación entre potencia y tamaño de la muestra (figura 7.7).
+```{r}
+library(ggpubr)
+library(pwr)
+library(tidyr)
+
+# Definir los valores del enunciado
+alfa <- 0.05
+media_nula <- 60
+sigma <- 12
+
+# Definir el tamaño del efecto
+media_verdadera <- 55.6
+delta <- media_verdadera - media_nula
+delta_normalizado <- delta / sigma
+
+# Definir los tamaños de muestra
+ns <- seq(1, 130, 0.1)
+
+# Definir función para calcular el poder de la prueba Z bilateral
+# y aplicar a los tamaños de muestra.
+f_pzb <- function(x) pwr.norm.test(delta_normalizado, n = x, sig.level = alfa,
+                                   alternative = "two.sided")[["power"]]
+poder_bilat <- sapply(ns, f_pzb)
+
+# Definir función para calcular el poder de la prueba Z con hipótesis alternativa
+# unilateral tipo 'less' y aplicar a los tamaños de muestra.
+f_pzu <- function(x) pwr.norm.test(delta_normalizado, n = x, sig.level = alfa,
+                                   alternative = "less")[["power"]]
+poder_unilat <- sapply(ns, f_pzu)
+
+# Graficar estas curvas
+datos_anchos <- data.frame(ns, poder_bilat, poder_unilat)
+datos_largos <- datos_anchos |> 
+                pivot_longer(-ns, names_to = "Tipo", values_to = "Poder")
+datos_largos[["Tipo"]] <- factor(datos_largos[["Tipo"]],
+                                 labels = c("Bilateral", "Unilateral"))
+g <- ggline(datos_largos, x = "ns", y = "Poder", plot_type = "l", numeric.x.axis = TRUE,
+            title = "Relación entre poder y tamaño de la muestra",
+            xlab = "Tamaño de la muestra",  
+            color = "Tipo", palette = c("steelblue", "steelblue1"))
+g <- ggpar(g, legend = c(.85, .35))
+print(g)
+```
+
+
+
+## Script 7.7: estimación del tamaño muestral para una prueba Z con dos muestras apareadas.
+```{r}
+library(pwr)
+
+# Definir los valores de las hipótesis
+alfa <- 0.05
+poder <- 0.90
+media_L <- 60
+media_C <- 66   # aprox.
+sigma_D <- 10   # desviación estándar de las diferencias, estimada
+
+# Calcular tamaño del efecto (normalizado por sigma_D)
+delta <- media_L - media_C
+delta_normalizado <- delta / sigma_D
+
+# Calcular y mostrar el tamaño de la muestra
+factores <- pwr.norm.test(d = delta_normalizado, sig.level = alfa,
+                          power = poder, alternative = "less")
+print(factores)
+cat("Número total de instancias requeridas:", ceiling(factores[["n"]]), "\n")
+```
+
+
+## Script 7.8: estimación de la d de Cohen para dos muestras independientes con diferentes tamaños.
+```{r}
+library(dplyr)
+library(pwr)
+library(rstatix)
+
+# Valores L*
+muestra_L <- c(55952, 66452, 40219, 42835, 86034, 50119, 88501, 76624, 65223, 48930,
+               51917, 60078, 39849, 61655, 46451, 66210, 62210, 81092, 55933, 54853,
+               54397, 65730, 58476, 71993, 67244, 66122, 62811, 52983, 62242, 49279) 
+n_L <- length(muestra_L)
+
+# Valores M* reportados en la literatura
+muestra_M <- c(73869, 60516, 93403, 67997, 83280, 71648, 84672, 68787, 59154,
+               82682, 47502, 72390, 43224, 35304, 57962, 61897, 87343, 66611,
+               63169, 76236, 69201, 94379, 70718, 48273, 74923) 
+n_M <- length(muestra_M)
+
+# Crear matriz de datos
+datos <- data.frame(algoritmo = factor(c(rep("L*", n_L), rep("M*", n_M))),
+                    tiempo = c(muestra_L, muestra_M))
+
+# Obtener y mostrar tamaño del efecto, usando la variante de Welch 
+tamaño_efecto <- datos |> cohens_d(tiempo ~ algoritmo, var.equal = FALSE)
+cat("Tamaño del efecto:\n")
+print(tamaño_efecto)
+```
+
+
+## Script 7.9: potencia de una prueba t unilateral para dos muestras independientes con diferentes tamaños.
+```{r}
+# Obtener poder de la prueba realizada
+factores <- pwr.t2n.test(n1 = n_L, n2 = n_M, d = tamaño_efecto[["effsize"]], 
+                         sig.level = 0.05, alternative = "less")
+
+# Mostrar los factores y la probabilidad de cometer un error tipo II
+cat("\nFactores de la prueba:\n")
+print(factores, digits = 3)
+cat("Beta:", round(1 - factores[["power"]], 2), "\n")
+```
+
+
+### Figura 7.10: poder de una prueba unilateral de la diferencia de dos proporciones con muestras de diferente tamaño.
+```{r}
+pwr.2p2n.test(h = ES.h(0.18, 0.13), n1 = 25, n2 = 30,
+               alternative = "greater", sig.level = 0.05)
+
+
+factores <- pwr.2p.test(h = ES.h(0.18, 0.13), power = 0.80,
+                         sig.level = 0.05, alternative = "greater")
+plot(factores) + theme_pubr()
+```
+
+
+

@@ -1,0 +1,382 @@
+---
+title: "Lectura 03"
+author: "Nicolás Valdés"
+date: "2026-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Cap: Inferencia con medias muestrales
+
+## Script 5.1: prueba Z para una muestra.
+```{r}
+library(TeachingDemos)
+library(ggpubr)
+
+# Ingresar los datos
+muestra <- c(19.33, 29.37, 29.14, 32.10, 25.04, 22.22, 31.26, 26.92, 31.40, 17.66,
+             22.55, 20.69, 24.68, 28.74, 26.85, 29.68, 29.27, 26.72, 27.08, 20.62)
+
+# Establecer los datos conocidos
+desv_est <- 2.32
+n <- length(muestra)
+valor_nulo <- 20
+
+# Fijar un nivel de significación
+alfa <- 0.01
+
+# Crear gráfico Q-Q para verificar la distribución de la muestra
+g <- ggqqplot(data = data.frame(muestra), x = "muestra",
+              title = "Gráfico Q-Q muestra v/s distribución normal",
+              xlab = "Teórico", ylab = "Muestra",
+              color = "steelblue", alpha = 0.7)
+print(g)
+
+# Verificar distribución muestral usando la prueba de normalidad de Shapiro-Wilk
+normalidad <- shapiro.test(muestra)
+cat("Prueba de normalidad:\n")
+cat("--------------------\n")
+print(normalidad)
+
+# Calcular y mostrar la media, el estadístico de prueba y el valor p para la muestra
+media <- mean(muestra)
+Z <- (media - valor_nulo) / (desv_est / sqrt(n))
+p <- 2 * pnorm(Z, lower.tail = FALSE)
+
+cat("\n\nPrueba Z para una muestra (a mano):\n")
+cat("----------------------------------\n")
+cat("Media muestral:", media, "[M$]\n")
+cat("Estadístico Z :", Z, "\n")
+cat("Valor p       : ", p, "\n")
+
+# Hacer la prueba Z usando el paquete TeachingDemos
+
+# Una alternativa es usando la media muestral y el tamaño de la muestra
+prueba1 <- z.test(media, mu = valor_nulo, n = 20, alternative = "two.sided",
+                  stdev = desv_est, conf.level = 1-alfa)
+
+# Otra opción es usando la muestra directamente
+prueba2 <- z.test(muestra, mu = valor_nulo, alternative = "two.sided",
+                  stdev = desv_est, conf.level = 1-alfa)
+
+# Mostrar los resultados
+cat("\n\nPrueba Z para una muestra usando z.test, versión 1:\n")
+cat("--------------------------------------------------\n")
+print(prueba1)
+cat("\n\nPrueba Z para una muestra usando z.test, versión 2:\n")
+cat("--------------------------------------------------\n")
+print(prueba2)
+```
+
+
+
+## Script 5.2: prueba t para una muestra.
+```{r}
+library(ggpubr)
+
+# Cargar los datos
+tiempo <- c(411.5538, 393.2753, 445.8905, 411.4022, 498.8969, 388.6731, 430.0382, 469.4734,
+            409.5844, 442.0800, 418.1169, 408.4110, 463.3733, 407.0908, 516.5222)
+
+# Establecer los datos conocidos
+n <- length(tiempo)
+grados_libertad <- n - 1
+valor_nulo <- 500
+
+# Verificar si la distribución se acerca a la normal
+g <- ggqqplot(data = data.frame(tiempo), x = "tiempo",
+              title = "Gráfico Q-Q muestra v/s distribución normal",
+              xlab = "Teórico", ylab = "Muestra",
+              color = "steelblue", alpha = 0.7)
+print(g)
+
+# Fijar un nivel de significación
+alfa <- 0.025
+
+# Calcular y mostrar la media, el estadístico de prueba y el valor p para la muestra
+media <- mean(tiempo)
+desv_est <- sd(tiempo)
+error_est <- desv_est / sqrt(n)
+estadistico_t <- (media - valor_nulo) / error_est
+p <- pt(estadistico_t, df = grados_libertad, lower.tail = TRUE)
+
+cat("Prueba t unilateral para una muestra (a mano):\n")
+cat("---------------------------------------------\n")
+cat("Media muestral:", media, "[M$]\n")
+cat("Estadístico t :", estadistico_t, "\n")
+cat("Valor p       : ", p, "\n")
+
+# Construir y mostrar el intervalo de confianza
+t_critico <- qt(alfa, df = grados_libertad, lower.tail = FALSE)
+superior <- media + t_critico * error_est
+cat(sprintf("%.1f %% I.C.  :", alfa * 100))
+cat(" (-Inf, ", superior, "]\n", sep = "")
+
+# Aplicar la prueba t de Student con la función de R
+prueba <- t.test(tiempo, mu = valor_nulo, alternative = "less", conf.level = 1 - alfa)
+cat("\n\nPrueba t unilateral para una muestra usando t.test:\n")
+cat("--------------------------------------------------\n")
+print(prueba)
+```
+
+
+## Script 5.3: inferencia con la media de las diferencias entre dos muestras pareadas usando la distribución t.
+```{r}
+# Cargar los datos
+instancia <- seq(1, 35, 1)
+
+t_A <- c(436.5736, 470.7937, 445.8354, 470.9810, 485.9394, 464.6145, 466.2139,
+         468.9065, 473.8778, 413.0639, 496.8705, 450.6578, 502.9759, 465.6358,
+         437.6397, 458.8806, 503.1435, 430.0524, 438.5959, 439.7409, 464.5916,
+         467.9926, 415.3252, 495.4094, 493.7082, 433.1082, 445.7433, 515.2049,
+         441.9420, 472.1396, 451.2234, 476.5149, 440.7918, 460.1070, 450.1008)
+
+t_B <- c(408.5142, 450.1075, 490.2311, 513.6910, 467.6467, 484.1897, 465.9334,
+         502.6670, 444.9693, 456.3341, 501.1443, 471.7833, 441.1206, 544.1575,
+         447.8844, 432.4108, 477.1712, 482.4828, 458.2536, 474.9863, 496.0153,
+         485.8112, 457.4253, 483.3700, 510.7131, 467.5739, 482.5621, 453.5986,
+         385.9391, 548.7884, 467.2533, 494.7049, 451.9716, 522.3699, 444.1270)
+diferencia <- t_A - t_B
+
+# Fijar un nivel de significación
+alfa <- 0.05
+
+# Verificar si la distribución se acerca a la normal
+cat("Prueba de normalidad:\n")
+cat("--------------------\n")
+normalidad <- shapiro.test(diferencia)
+print(normalidad)
+
+# Aplicar la prueba t de Student (bilateral) a la diferencia de medias
+valor_nulo <- 0
+prueba_1 <- t.test(diferencia, alternative = "two.sided",
+                   mu = valor_nulo, conf.level = 1 - alfa)
+
+# Otra alternativa es aplicar la prueba t de Student directamente
+# a las dos muestras pareadas.
+prueba_2 <- t.test(x = t_A, y = t_B, paired = TRUE, alternative = "two.sided",
+                   mu = valor_nulo, conf.level = 1 - alfa)
+
+# Mostrar los resultados
+cat("\nPrueba t para las diferencias de observaciones pareadas:\n")
+cat("-------------------------------------------------------\n")
+print(prueba_1)
+cat("\nPrueba t para dos muestras pareadas:\n")
+cat("-----------------------------------\n")
+print(prueba_2)
+```
+
+
+
+## Script 5.4: prueba t para dos muestras independientes.
+```{r}
+# Cargar los datos
+vacuna_MVA3 <- c(6.04, 19.84,  8.62, 13.02, 12.20, 14.78, 4.53, 26.67,
+                 3.14, 19.14, 10.86, 13.13,  6.34, 11.16, 7.62)
+
+vacuna_MVF5 <- c(5.32,  3.31,  5.68,  5.73,  4.86,  5.68, 2.93,  5.48,
+                 6.10,  2.56,  7.52,  7.41,  4.02)
+
+# Fijar un nivel de significación
+alfa <- 0.01
+
+# Verificar si las muestras se distribuyen de manera cercana a la normal
+normalidad_MVA3 <- shapiro.test(vacuna_MVA3)
+normalidad_MVF5 <- shapiro.test(vacuna_MVF5)
+cat("Pruebas de normalidad:\n")
+cat("---------------------\n")
+print(normalidad_MVA3)
+print(normalidad_MVF5)
+
+# Aplicar la prueba t de Student (unilateral) para dos muestras independientes, aplicando
+# la corrección de Welch y obtener la diferencia entre las medias.
+prueba <- t.test(x = vacuna_MVA3, y = vacuna_MVF5, paired = FALSE,
+                 alternative = "greater", mu = 0, conf.level = 1 - alfa)
+diferencia <- prueba[["estimate"]][1] - prueba[["estimate"]][2]
+
+# Mostrar el resultado de la prueba
+cat("\nPrueba t para dos muestras independientes:\n")
+cat("-----------------------------------------\n")
+print(prueba)
+cat("Diferencia de las medias =", diferencia, "[μg/ml]\n")
+```
+
+
+# Cap 6: Inferencia con proporciones muestrales
+
+## Script 6.1: método de Wald para una proporción.
+```{r}
+# Fijar valores conocidos
+n <- 150
+p_exito <- 0.64
+valor_nulo <- 0.7
+
+# Fijar el nivel de significación
+alfa <- 0.05
+
+# Construir el intervalo de confianza
+error_est <- sqrt((p_exito * (1 - p_exito)) / n)
+Z_critico <- qnorm(alfa / 2, lower.tail = FALSE)
+inferior <- p_exito - Z_critico * error_est
+superior <- p_exito + Z_critico * error_est
+cat("Prueba de Wald para una proporción\n")
+cat("----------------------------------\n")
+cat("Intervalo de confianza = [", inferior, ", ", superior, "]\n", sep = "")
+
+# Realizar la prueba de hipótesis
+error_est_hip <- sqrt((valor_nulo * (1 - valor_nulo)) / n)
+Z <- (p_exito - valor_nulo) / error_est_hip
+p <- pnorm(Z, lower.tail = FALSE)
+cat("Hipótesis alternativa unilateral\n")
+cat("Z =", Z, "\n")
+cat("p =", p)
+```
+
+
+## Script 6.2: método de Wald para la diferencia entre dos proporciones (ejemplo 1).
+```{r}
+# Fijar valores conocidos
+n_hombres <- 48
+n_mujeres <- 42
+exitos_hombres <- 26
+exitos_mujeres <- 20
+valor_nulo <- 0
+
+# Fijar el nivel de significación
+alfa <- 0.05
+
+# Calcular probabilidades de éxito
+p_hombres <- exitos_hombres / n_hombres
+p_mujeres <- exitos_mujeres / n_mujeres
+
+# Estimar la diferencia de las proporciones observadas
+diferencia <- p_hombres - p_mujeres
+  
+# Construir y mostrar el intervalo de confianza
+error_hombres <- (p_hombres * (1 - p_hombres)) / n_hombres
+error_mujeres <- (p_mujeres * (1 - p_mujeres)) / n_mujeres
+error_est <- sqrt(error_hombres + error_mujeres)
+Z_critico <- qnorm(alfa / 2, lower.tail = FALSE)
+inferior <- diferencia - Z_critico * error_est
+superior <- diferencia + Z_critico * error_est
+cat("Prueba de Wald para la diferencia de dos proporciones\n")
+cat("-----------------------------------------------------\n")
+cat("Intervalo de confianza = [", inferior, ", ", superior, "]\n", sep = "")
+
+# Realizar y mostrar la prueba de hipótesis
+p_agrupada <- (exitos_hombres + exitos_mujeres) / (n_hombres + n_mujeres)
+error_hombres <- (p_agrupada * (1 - p_agrupada)) / n_hombres
+error_mujeres <- (p_agrupada * (1 - p_agrupada)) / n_mujeres
+error_est_hip_nula <- sqrt(error_hombres + error_mujeres)
+Z <- (diferencia - valor_nulo) / error_est_hip_nula
+p <- 2 * pnorm(Z, lower.tail = FALSE)
+cat("Hipótesis alternativa bilateral\n")
+cat("Z =", Z, "\n")
+cat("p =", p, "\n")
+```
+
+
+## Script 6.3: método de Wald para la diferencia entre dos proporciones (ejemplo 2).
+```{r}
+# Fijar valores conocidos
+n_hombres <- 89
+n_mujeres <- 61
+exitos_hombres <- 45
+exitos_mujeres <- 21
+valor_nulo <- 0.1
+
+# Fijar el nivel de significación
+alfa <- 0.05
+
+# Calcular probabilidades de éxito
+p_hombres <- exitos_hombres / n_hombres
+p_mujeres <- exitos_mujeres / n_mujeres
+
+# Estimar la diferencia
+diferencia <- p_hombres - p_mujeres
+  
+# Realizar y mostrar la prueba de hipótesis
+error_hombres <- (p_hombres * (1 - p_hombres)) / n_hombres
+error_mujeres <- (p_mujeres * (1 - p_mujeres)) / n_mujeres
+error_est <- sqrt(error_hombres + error_mujeres)
+Z <- (diferencia - valor_nulo) / error_est
+p <- pnorm(Z, lower.tail = FALSE)
+cat("Prueba de Wald para la diferencia de dos proporciones\n")
+cat("-----------------------------------------------------\n")
+cat("Hipótesis alternativa unilateral\n")
+cat("Z =", Z, "\n")
+cat("p =", p)
+```
+
+
+## Script 6.4: método de Wilson para una proporción.
+```{r}
+# Fijar valores conocidos
+n <- 150
+p_exito <- 0.64
+valor_nulo <- 0.7
+
+# Fijar el nivel de significación
+alfa <- 0.05
+
+# Construir el intervalo de confianza con la proporción de éxito y el error
+# estándar ajustados
+Z_critico <- qnorm(alfa / 2, lower.tail = FALSE)
+p_ajustada <- (p_exito + Z_critico^2 / (2 * n)) / (1 + Z_critico^2 / n)
+error_est <- sqrt(p_exito * (1 - p_exito) / n + Z_critico^2 / (4 * n^2)) /
+             (1 + Z_critico^2 / n)
+inferior <- p_ajustada - Z_critico * error_est
+superior <- p_ajustada + Z_critico * error_est
+cat("Prueba de Wilson para una proporción\n")
+cat("------------------------------------\n")
+cat("Intervalo de confianza = [", inferior, ", ", superior, "]\n", sep = "")
+
+# Realizar la prueba de hipótesis
+error_est_hip <- sqrt((valor_nulo * (1 - valor_nulo)) / n)
+Z <- (p_exito - valor_nulo) / error_est_hip
+p <- pnorm(Z, lower.tail = FALSE)
+cat("Hipótesis alternativa unilateral\n")
+cat("Z =", Z, "\n")
+cat("p =", p)
+```
+
+
+## Script 6.5: prop.test() para una proporción (intervalo de Wilson).
+```{r}
+# Fijar valores conocidos y establecer el nivel de significación buscado
+n <- 150
+p_exito <- 0.64
+valor_nulo <- 0.7
+alfa <- 0.05
+
+# Calcular cantidad de éxitos
+exitos <- p_exito * n
+
+# Realizar y mostrar la prueba de Wilson en R
+prueba <- prop.test(exitos, n = n, p = valor_nulo,
+                    alternative = "greater", conf.level = 1 - alfa)
+print(prueba)
+```
+
+
+## Script 6.6: prop.test() para la diferencia entre dos proporciones (intervalo de Wald).
+```{r}
+# Fijar valores conocidos (hombres, mujeres)
+n <-c(48, 42)
+exitos <- c(26, 20)
+
+# Establecer el nivel de significación
+alfa <- 0.05
+
+# Realizar y mostrar la prueba de Wilson en R
+prueba <- prop.test(exitos, n = n, alternative = "two.sided",
+                    conf.level = 1 - alfa)
+print(prueba)
+```
+
+
+

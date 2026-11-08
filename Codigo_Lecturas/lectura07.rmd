@@ -1,0 +1,750 @@
+---
+title: "Lectura 07"
+author: "Nicolás Valdés"
+date: "2026-11-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Apuntes de **Lectura 7 · Transformaciones y pruebas con rangos**, capítulo 10 de José Luis Jara y Jacqueline Köhler C. Las páginas indicadas corresponden a la numeración impresa en el PDF.
+
+Ejecuta los bloques en orden. Los comentarios agregados comienzan con `# Guía:`.
+
+## Script 10.1: una transformación lineal no cambia el resultado de la prueba t.
+
+El ejemplo inventa siete temperaturas máximas diarias para cada una de dos ciudades. La pregunta es si comparar las medias con una prueba t da el mismo resultado al expresar las temperaturas en Celsius o en Fahrenheit.
+
+```{r}
+# Crear las temperaturas máximas [°C] de una semana en dos ciudades
+# (datos ficticios).
+# Guía: Cada posición corresponde a la máxima de un día. Hay siete valores por ciudad.
+ciudad_A <- c(24.1, 26.3, 25.8, 23.9, 27.2, 28.0, 25.5)
+ciudad_B <- c(21.4, 22.8, 23.5, 20.9, 24.1, 23.3, 22.0)
+
+# Convertir las temperaturas a grados Fahrenheit
+# Guía: El factor 1.8 cambia la unidad y el 32 fija el origen de la escala Fahrenheit.
+ciudad_A_F <- 1.8 * ciudad_A + 32
+ciudad_B_F <- 1.8 * ciudad_B + 32
+
+# Comparar la media y la desviación estándar de A en las dos escalas
+# Guía: sprintf() inserta la media y la desviación estándar con tres decimales. La media
+# Guía: cambia de origen y escala. La desviación estándar solo se multiplica por 1.8.
+cat(sprintf("Ciudad A en °C: media = %.3f, desviación estándar = %.3f\n",
+            mean(ciudad_A), sd(ciudad_A)))
+cat(sprintf("Ciudad A en °F: media = %.3f, desviación estándar = %.3f\n",
+            mean(ciudad_A_F), sd(ciudad_A_F)))
+
+# Aplicar la prueba t para muestras independientes en las dos escalas
+# Guía: t.test() usa por defecto la prueba bilateral de Welch para estos dos vectores. Al
+# Guía: convertir, la diferencia de medias y su error estándar se multiplican por 1.8, de
+# Guía: modo que el cociente t queda igual.
+prueba_C <- t.test(ciudad_A, ciudad_B)
+prueba_F <- t.test(ciudad_A_F, ciudad_B_F)
+# Guía: Se extraen el estadístico t y el valor p de cada objeto de prueba para compararlos.
+cat(sprintf("\nPrueba t en °C: t = %.3f, p = %.3f\n",
+            prueba_C[["statistic"]], prueba_C[["p.value"]]))
+cat(sprintf("Prueba t en °F: t = %.3f, p = %.3f\n",
+            prueba_F[["statistic"]], prueba_F[["p.value"]]))
+```
+
+## Script 10.2: obtención de los datos para el ejemplo de transformación logarítmica.
+
+El conjunto `Animals` del paquete `MASS` contiene los pesos del cuerpo y del cerebro de 28 especies. El script prepara una tabla con ambas medidas en kilogramos y agrega sus logaritmos naturales para la exploración del script siguiente.
+
+```{r}
+# Guía: MASS aporta la tabla Animals. dplyr y tibble aportan las funciones para prepararla.
+# Guía: ggpubr se usará en el script siguiente.
+library(dplyr)
+library(ggpubr)
+library(MASS)
+library(tibble)
+
+# Usaremos el conjunto de datos "Animals" con el peso promedio del cuerpo y cerebro de
+# 28 especies de animales terrestres. Cambiamos gramos a kilos para mayor facilidad.
+# Guía: El pipe pasa la tabla de una operación a la siguiente. body ya está en kg y brain
+# Guía: se divide por 1000 para convertir gramos a kg.
+datos <- Animals |> rename(Peso_cuerpo = body) |>
+                    mutate(Peso_cerebro = round(brain / 1000, 4)) |>
+                    rownames_to_column(var = "Animal") |>
+                    dplyr::select(Animal, Peso_cuerpo, Peso_cerebro)
+
+# Aplicar transformación logarítmica en base e (no hay valores nulos ni negativos)
+# Guía: log() usa base e. mutate() agrega las columnas transformadas a la misma tabla, que
+# Guía: conserva ambos pesos originales para compararlos después.
+datos <- datos |> mutate(Peso_cuerpo_ln = log(Peso_cuerpo)) |>
+                  mutate(Peso_cerebro_ln = log(Peso_cerebro))
+```
+
+## Script 10.3: (continuación del script 10.2) gráficos para el ejemplo de transformación logarítmica.
+
+Usa `datos` del script 10.2. Cada fila representa una especie. Los histogramas muestran cómo cambia la distribución del peso cerebral y los gráficos de dispersión muestran cómo cambia la relación entre ambos pesos al pasar a logaritmos.
+
+```{r}
+# Crear histogramas para el peso cerebral antes y después de la transformación logarítmica
+# Guía: Cada histograma cuenta especies en diez intervalos de la escala correspondiente.
+# Guía: Los dos paneles permiten ver cómo cambia la cola derecha.
+h1 <- gghistogram(datos, x = "Peso_cerebro", bins = 10,
+                  xlab = "Peso del cerebro [kg]", ylab = "Frecuencia",
+                  color = "steelblue", fill = "steelblue", alpha = 0.7)
+h2 <- gghistogram(datos, x = "Peso_cerebro_ln", bins = 10,
+                  xlab = "Log- nat. del peso del cerebro [kg]", ylab = "Frecuencia",
+                  color = "steelblue", fill = "steelblue", alpha = 0.7)
+
+# Crear gráficos de dispersión para la relación entre peso corporal y peso del
+# cerebro, antes y después de aplicar la transformación logarítmica.
+# Guía: Cada punto representa una especie. El primer panel usa los pesos originales y el
+# Guía: segundo usa el logaritmo de ambos pesos.
+g1 <- ggscatter(datos, x = "Peso_cuerpo", y = "Peso_cerebro",
+                color = "steelblue", alpha = 0.7,
+                xlab = "Peso corporal [kg]", ylab = "Peso del cerebro [kg]")
+g2 <- ggscatter(datos, x = "Peso_cuerpo_ln", y = "Peso_cerebro_ln",
+                color = "steelblue", xlab = "Log. nat. del peso corporal [kg]",
+                ylab = "Log. nat. del peso\ndel cerebro [kg]")
+# Guía: breaks cambia las marcas del eje vertical del gráfico transformado.
+g2 <- g2 + scale_y_continuous(breaks = seq(-8, 2, 2))
+
+# Preparar los gráficos de dispersión para formar una sola figura
+# Guía: mapply() empareja cada gráfico con su letra de panel. lapply() aplica el mismo tema
+# Guía: a cada gráfico de la lista.
+pls <- list(h1, h2, g1, g2)
+subtits <- c("A", "B", "C", "D")
+pls <- mapply(function(g, l) g + labs(subtitle = l), pls, subtits, SIMPLIFY = FALSE)
+tema <- function(g) g + theme(text = element_text(size = 9),
+                              plot.subtitle = element_text(face = "bold",
+                                                           colour = "steelblue", size = 12))
+pls <- lapply(pls, tema)
+
+# Crear una única figura, darle un título y mostrarla
+# Guía: ggarrange() organiza los cuatro paneles y annotate_figure() agrega el título común.
+grafico  <- ggarrange(plotlist = pls, nrow = 2, ncol = 2, align = "hv")
+texto <- "Efecto de la transformación logarítmica"
+titulo  <- text_grob(texto, face = "bold", size = 14)
+grafico <- annotate_figure(grafico, top = titulo)
+print(grafico)
+```
+
+## Script 10.4: datos de la población total de Estados Unidos.
+
+El conjunto `uspop`, incluido en R, contiene la población de Estados Unidos en millones de habitantes, de 1790 a 1970 en intervalos de diez años. Se obtiene una tabla con el año y la población para observar la distribución y la evolución temporal antes de transformar.
+
+```{r}
+library(ggpubr)
+library(rcompanion)
+
+# Crear estructura con los datos a partir de la serie de tiempo (objeto "ts")
+# definida en el conjunto de datos "uspop".
+# Guía: time() extrae los años de la serie ts. as.numeric(window(uspop)) deja las
+# Guía: poblaciones como un vector para formar una fila por año.
+Año <- as.numeric(time(uspop))
+Poblacion <- as.numeric(window(uspop))
+datos <- data.frame(Año, Poblacion)
+
+# Obtener un histograma y gráfico de dispersión de la población por año
+# con los datos originales.
+# Guía: El histograma agrupa los valores de población. La dispersión conserva el orden
+# Guía: temporal al usar el año en el eje horizontal.
+ho <- gghistogram(datos, x = "Poblacion", bins = 7,
+                  xlab = "Población (millones)", ylab = "Frecuencia",
+                  color = "steelblue", fill = "steelblue", alpha = 0.7)
+ho <- ho + theme(axis.title = element_text(size = rel(0.9)),
+                 axis.text = element_text(size = rel(0.8)))
+go <- ggscatter(datos, x = "Año", y = "Poblacion", color = "steelblue", alpha = 0.7,
+                xlab = "Año", ylab = "Población (millones)")
+go <- go + theme(axis.title = element_text(size = rel(0.9)),
+                 axis.text = element_text(size = rel(0.8)))
+
+# Unir y mostrar el histograma y el gráfico de dispersión
+# Guía: Los gráficos se colocan en una sola fila con dos columnas y se les agrega un título
+# Guía: común.
+plot_original  <- ggarrange(ho, go, ncol = 2, nrow = 1, labels = "AUTO",
+                            font.label = list(color ="steelblue"))
+texto <- "Histograma de la población y población por año"
+titulo  <- text_grob(texto, face = "bold", size = 14)
+plot_original <- annotate_figure(plot_original, top = titulo)
+print(plot_original)
+```
+
+## Script 10.5: (continuación del script 10.4) aplicación de la transformacion de Tukey a los datos de la población de Estados Unidos.
+
+Con `datos` y `Año` del script 10.4 se crean seis versiones de la misma serie de población. Comparar los paneles permite ver qué potencias dejan la relación con el año visualmente más cerca de una recta. 
+
+```{r}
+# Aplicar transformación para diferentes escalas de Tukey
+# Guía: En las potencias negativas se antepone un signo menos para conservar el orden de
+# Guía: las poblaciones. La escalera usa el logaritmo cuando lambda vale cero.
+exp_2neg <- -1 / (datos[["Poblacion"]] ** 2)
+exp_1neg <- -1 / datos[["Poblacion"]]
+exp_1div2neg <- -1 / sqrt(datos[["Poblacion"]])
+exp_0 <- log(datos[["Poblacion"]])
+exp_1div2pos <- sqrt(datos[["Poblacion"]])
+exp_2pos <- datos[["Poblacion"]] ** 2
+
+# Unir datos transformados en una matriz de datos
+# Guía: Cada fila conserva su año y reúne seis transformaciones de la misma población.
+datos_tuk <- data.frame(Año, exp_2neg, exp_1neg, exp_1div2neg,
+                       exp_0, exp_1div2pos, exp_2pos)
+
+# Crear gráficos de dispersión para población/año usando los datos
+# transformados con distintas escalas de Tukey.
+# Guía: Todos los paneles usan el año en el eje horizontal. La columna de la población
+# Guía: transformada es lo que cambia de un panel a otro.
+gt1 <- ggscatter(datos_tuk, x = "Año", y = "exp_2neg", color = "steelblue", alpha = 0.7)
+gt2 <- ggscatter(datos_tuk, x = "Año", y = "exp_1neg", color = "steelblue", alpha = 0.7)
+gt3 <- ggscatter(datos_tuk, x = "Año", y = "exp_1div2neg", color = "steelblue", alpha = 0.7)
+gt4 <- ggscatter(datos_tuk, x = "Año", y = "exp_0", color = "steelblue", alpha = 0.7)
+gt5 <- ggscatter(datos_tuk, x = "Año", y = "exp_1div2pos", color = "steelblue", alpha = 0.7)
+gt6 <- ggscatter(datos_tuk, x = "Año", y = "exp_2pos", color = "steelblue", alpha = 0.7)
+
+# Preparar los gráficos de dispersión para formar una sola figura
+# Guía: La lista permite aplicar etiquetas y tema de manera uniforme. bquote() construye
+# Guía: una etiqueta con lambda y el exponente de cada panel.
+gts <- list(gt1, gt2, gt3, gt4, gt5, gt6)
+gts <- lapply(gts, function(g) g + ylab("Población transformada"))
+exps <- c("-2", "-1", "-1/2", "0", "1/2", "2")
+subtits <- sapply(exps, function(e) bquote(lambda == .(e), where = list(e = e)))
+gts <- mapply(function(g, l) g + labs(subtitle = l), gts, subtits, SIMPLIFY = FALSE)
+tema <- function(g) g + theme(text = element_text(size = 8),
+                              plot.subtitle = element_text(face = "bold",
+                                                           colour = "steelblue", size = 10))
+gts <- lapply(gts, tema)
+
+# Crear una única figura, darle un título y mostrarla
+# Guía: La cuadrícula de dos filas y tres columnas permite comparar la curvatura entre las
+# Guía: seis transformaciones.
+plot_tr  <- ggarrange(plotlist = gts, ncol = 3, nrow = 2, align = "hv")
+texto <- "Población transformada por año (Tukey)"
+titulo  <- text_grob(texto, face = "bold", size = 14)
+plot_tr <- annotate_figure(plot_tr, top = titulo)
+print(plot_tr)
+```
+
+## Script 10.6: (continuación del script 10.5) búsqueda del 𝜆 de la escalera de Tukey para la población de Estados Unidos.
+
+Este script continúa el ejemplo de `uspop`. Busca un exponente de Tukey que acerque a la normalidad la distribución de los valores transformados. La búsqueda evalúa la forma de la distribución, mientras que los gráficos del script anterior muestran cómo se relaciona la población con el año. 
+
+```{r}
+# Buscar el lambda de la escalera de Tukey entre -1 y 1, con un paso de 0,001
+# Guía: Se prueban lambdas de -1 a 1 de a 0.001. Por defecto, la función elige el que
+# Guía: maximiza el estadístico W de Shapiro-Wilk. returnLambda guarda ese exponente y
+# Guía: plotit controla la generación del gráfico.
+lambda_tk <- transformTukey(datos[["Poblacion"]], start = -1, end = 1,
+                            int = 0.001, plotit = FALSE, returnLambda = TRUE)
+```
+
+## Script 10.7: estimación del parámetro de la transformación Box-Cox para la población de Estados Unidos.
+
+Se vuelve a construir la tabla de `uspop` para analizar la misma serie con Box-Cox. El objetivo es estimar por máxima verosimilitud un exponente para la población y examinar qué potencias simples son compatibles con los datos. 
+
+```{r}
+library(car)
+library(ggpubr)
+
+# Crear la matriz de datos a partir de la serie de tiempo (objeto "ts")
+# definida en el conjunto de datos "uspop".
+# Guía: Se separan los años y las poblaciones de la serie para reutilizarlos como columnas
+# Guía: de datos_bc.
+Año <- as.numeric(time(uspop))
+Poblacion <- as.numeric(window(uspop))
+datos_bc <- data.frame(Año, Poblacion)
+
+# Estimar el lambda de la transformación Box-Cox por máxima verosimilitud
+# Guía: powerTransform() recibe la columna de poblaciones positivas. En el resumen se leen
+# Guía: el exponente estimado, el redondeado y el intervalo de confianza para lambda.
+bc <- powerTransform(datos_bc[["Poblacion"]])
+print(round(summary(bc)[["result"]], 3))
+```
+
+## Script 10.8: (continuación del script 10.7) aplicación de la transformación Box-Cox con el 𝜆 estimado.
+
+Utiliza el objeto `bc` estimado en el script 10.7 y la tabla `datos_bc`. Aplica Box-Cox a las poblaciones observadas y muestra la forma de la distribución transformada y su relación con el año. 
+
+```{r}
+# Aplicar la transformación con el lambda estimado
+# Guía: bc contiene el ajuste del script anterior. Se extrae el exponente estimado y
+# Guía: bcPower() crea el vector que queda en la nueva columna Boxcox.
+lambda_bc <- bc[["lambda"]]
+datos_bc[["Boxcox"]] <- bcPower(datos_bc[["Poblacion"]], lambda_bc)
+
+# Crear gráficos de los datos transformados con el lambda estimado
+# Guía: El histograma muestra la forma de la distribución. En el gráfico Q-Q se mira la
+# Guía: cercanía a la recta. La dispersión muestra si la evolución con el año parece más
+# Guía: lineal.
+h_bc <- gghistogram(datos_bc, x = "Boxcox", bins = 7,
+                    color = "steelblue", fill = "steelblue", alpha = 0.7,
+                    xlab = "Población transformada", ylab = "Frecuencia")
+q_bc <- ggqqplot(datos_bc, x = "Boxcox", color = "steelblue",
+                 xlab = "Cuantil teórico", ylab = "Población transformada")
+g_bc <- ggscatter(datos_bc, x = "Año", y = "Boxcox",
+                  color = "steelblue", alpha = 0.7,
+                  xlab = "Año", ylab = "Población transformada")
+# Guía: Se reúnen las tres vistas en una fila. Las letras identifican cada panel.
+plot_bc <- ggarrange(h_bc, q_bc, g_bc, ncol = 3, nrow = 1, align = "hv",
+                     labels = "AUTO",
+                     font.label = list(size = 10, color = "steelblue"))
+print(plot_bc)
+```
+
+## Script 10.9: datos y gráficos del ejemplo de los precios de los autos.
+
+El conjunto `Cars93` de `MASS` reúne características de 93 modelos de autos comercializados en Estados Unidos en 1993. Se conservan los modelos con tracción delantera o trasera para explorar el precio en miles de dólares antes y después de tomar logaritmos.
+
+```{r}
+library(car)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(tibble)
+
+# Obtener el precio [miles de dólares] de los modelos con tracción delantera
+# o trasera, y su logaritmo natural.
+# Guía: Se excluyen los autos de tracción integral. Los niveles del factor dejan Trasera
+# Guía: primero y Delantera después, lo que fija el orden de la comparación posterior.
+datos_au <- MASS::Cars93 |>
+  filter(DriveTrain %in% c("Front", "Rear")) |>
+  mutate(Traccion = factor(DriveTrain, levels = c("Rear", "Front"),
+                           labels = c("Trasera", "Delantera")),
+         Log_precio = log(Price)) |>
+  dplyr::select(Traccion, Precio = Price, Log_precio)
+
+# Graficar las distribuciones antes y después de la transformación
+# Guía: facet.by separa los autos por tracción. h_au muestra miles de dólares y h_log
+# Guía: muestra el logaritmo natural del precio.
+h_au <- gghistogram(datos_au, x = "Precio", bins = 8, facet.by = "Traccion",
+                    color = "steelblue", fill = "steelblue", alpha = 0.7,
+                    xlab = "Precio [miles de dólares]", ylab = "Frecuencia")
+h_log <- gghistogram(datos_au, x = "Log_precio", bins = 8,
+                     facet.by = "Traccion", color = "steelblue",
+                     fill = "steelblue", alpha = 0.7,
+                     xlab = "Logaritmo del precio", ylab = "Frecuencia") +
+  scale_x_continuous(breaks = 2:4)
+# Guía: Los gráficos se presentan juntos para comparar la asimetría antes y después del
+# Guía: cambio de escala.
+plot_au <- ggarrange(h_au, h_log, ncol = 2, nrow = 1, labels = "AUTO",
+                     font.label = list(size = 10, color = "steelblue"))
+print(plot_au)
+```
+
+## Script 10.10: (continuación del script 10.9) estimación de un solo 𝜆 de Box-Cox para los precios de los autos con tracción trasera y delantera.
+
+Usa los precios originales y los tipos de tracción guardados en `datos_au`. Se estima una potencia Box-Cox común para los dos grupos. En la lectura, el intervalo para lambda contiene cero, lo que permite elegir el logaritmo ya calculado en el script 10.9. 
+
+```{r}
+# Estimar un solo lambda de Box-Cox para los dos grupos, a partir del modelo
+# con la tracción como variable independiente.
+# Guía: El modelo Precio ~ Traccion permite estimar un solo lambda considerando los centros
+# Guía: de ambos grupos. Aplicar una misma transformación mantiene los precios en una
+# Guía: escala común.
+bc_au <- powerTransform(lm(Precio ~ Traccion, data = datos_au))
+# Guía: Se imprime la tabla de lambda. Cero corresponde al logaritmo y uno conserva la
+# Guía: forma de la distribución.
+print(round(summary(bc_au)[["result"]], 3))
+```
+
+## Script 10.11: (continuación del script 10.10) prueba t para comparar el precio de los autos con tracción trasera y delantera en la escala logarítmica.
+
+Los modelos de auto con tracción trasera y delantera forman dos grupos independientes en el ejemplo. Se comparan sus precios en la escala logarítmica y se expresa el tamaño de la diferencia como una razón de medias geométricas en la escala original. 
+
+```{r}
+# Revisar la normalidad de cada grupo y la igualdad de varianzas, en la
+# escala transformada.
+# Guía: group_by() hace que Shapiro-Wilk se calcule por separado para los logaritmos de
+# Guía: cada tipo de tracción.
+normalidad_au <- datos_au |> group_by(Traccion) |>
+  shapiro_test(Log_precio) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+cat("\nPrueba de Shapiro-Wilk en cada grupo (datos transformados)\n")
+cat("----------------------------------------------------------\n")
+print(normalidad_au)
+# Guía: Levene evalúa igualdad de varianzas de los logaritmos entre los dos grupos.
+levene_au <- datos_au |> levene_test(Log_precio ~ Traccion) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+cat("\nPrueba de Levene (datos transformados)\n")
+cat("--------------------------------------\n")
+print(levene_au)
+
+# Comparar los dos grupos con la prueba t en la escala logarítmica, y llevar
+# la diferencia y su intervalo de vuelta con exp(): la razón entre las
+# medias geométricas de los precios con tracción trasera y delantera.
+# Guía: El ejemplo usa var.equal = TRUE después de revisar la dispersión. detailed = TRUE
+# Guía: incluye la estimación de la diferencia y su intervalo.
+prueba_au <- datos_au |>
+  t_test(Log_precio ~ Traccion, var.equal = TRUE, detailed = TRUE) |>
+# Guía: Al exponenciar la diferencia Trasera menos Delantera se obtiene una razón en ese
+# Guía: mismo orden. Se aplica exp() también a los dos límites del intervalo.
+  mutate(razon = exp(estimate), razon_inf = exp(conf.low),
+         razon_sup = exp(conf.high)) |>
+  dplyr::select(statistic, df, p, razon, razon_inf, razon_sup) |>
+  mutate(across(c(statistic, razon, razon_inf, razon_sup), ~ num(., digits = 3)))
+# Guía: Se imprimen el estadístico t, los grados de libertad, el valor p y la razón con su
+# Guía: intervalo.
+cat("\nPrueba t para muestras independientes (datos transformados)\n")
+cat("-----------------------------------------------------------\n")
+print(prueba_au)
+```
+
+## Script 10.12: (continuación del script 10.11) prueba t para una muestra, para saber si la mediana del precio de los autos con tracción delantera supera los 15 mil dólares.
+
+Se usa solo el grupo de tracción delantera de `datos_au`. La pregunta es si el precio típico supera los 15 mil dólares. El ejemplo usa una prueba t unilateral en logaritmos y lee el resultado como una inferencia sobre la mediana original bajo el supuesto de simetría de los logaritmos. 
+
+```{r}
+# Contrastar si la mediana del precio con tracción delantera supera 15 mil
+# dólares: la prueba t para una muestra con el logaritmo de 15 como valor
+# nulo, y la estimación y el límite inferior de su intervalo, llevados de
+# vuelta con exp().
+# Guía: filter() conserva los autos con tracción delantera. La fórmula ~ 1 indica una
+# Guía: muestra frente a un valor fijo. El umbral entra como log(15) y greater fija la
+# Guía: dirección de la pregunta.
+prueba_del <- datos_au |> filter(Traccion == "Delantera") |>
+  t_test(Log_precio ~ 1, mu = log(15), alternative = "greater",
+         detailed = TRUE) |>
+# Guía: exp() vuelve a miles de dólares. Con simetría de los logaritmos, exp(estimate)
+# Guía: estima la mediana del precio. Para la alternativa greater se muestra el límite
+# Guía: inferior unilateral.
+  mutate(mediana = exp(estimate), mediana_inf = exp(conf.low)) |>
+  dplyr::select(statistic, df, p, mediana, mediana_inf) |>
+  mutate(across(c(statistic, p, mediana, mediana_inf), ~ num(., digits = 3)))
+# Guía: Se informa el valor p junto con la estimación de la mediana y su límite inferior.
+cat("\nPrueba t para una muestra (tracción delantera)\n")
+cat("----------------------------------------------\n")
+print(prueba_del)
+```
+
+## Script 10.13: datos del ejemplo de las interfaces y prueba de Fligner-Killeen.
+
+Veintitrés personas prueban una sola interfaz cada una. Doce evalúan A y once evalúan B. Su índice de usabilidad promedia seis calificaciones en escala Likert de siete puntos. Los vectores de la tabla 10.2 se reúnen en formato largo y se explora si las dispersiones de los grupos difieren.
+
+```{r}
+# Guía: Los paquetes cargados aquí también se usan en los scripts de Wilcoxon y de
+# Guía: planificación que continúan el ejemplo.
+library(dplyr)
+library(pwr)
+library(rstatix)
+library(tibble)
+
+# Crear la matriz de datos en formato largo: el índice de usabilidad que dio
+# cada participante a la interfaz que evaluó.
+# Guía: Los vectores contienen un índice por persona. rep() crea la etiqueta de interfaz
+# Guía: que corresponde a cada puntuación.
+Interfaz_A <- c(2.7, 6.6, 1.6, 5.1, 3.7, 6.1, 5.0, 1.4, 1.8, 1.5, 3.0, 5.3)
+Interfaz_B <- c(5.0, 1.4, 5.6, 4.6, 6.7, 2.7, 1.3, 6.3, 3.7, 1.3, 6.8)
+Interfaz <- c(rep("A", length(Interfaz_A)), rep("B", length(Interfaz_B)))
+datos_int <- data.frame(Interfaz = factor(Interfaz),
+                        Indice = c(Interfaz_A, Interfaz_B))
+
+# Definir el nivel de significación
+# Guía: alfa_int se reutiliza para fijar el nivel de confianza en el script 10.14 y el
+# Guía: nivel de significación en el 10.15.
+alfa_int <- 0.05
+
+# Evaluar si las dispersiones difieren, con la prueba de Fligner-Killeen
+# Guía: Fligner-Killeen contrasta la igualdad de dispersiones. Un valor p alto deja abierta
+# Guía: la posibilidad de que las formas de las distribuciones difieran.
+cat("Prueba de Fligner-Killeen\n")
+cat("-------------------------\n")
+print(fligner.test(Indice ~ Interfaz, data = datos_int))
+```
+
+## Script 10.14: (continuación del script 10.13) prueba de suma de rangos de Wilcoxon y tamaño del efecto para el ejemplo de las interfaces.
+
+Con `datos_int` del script 10.13 se comparan los índices de usabilidad de dos grupos independientes. La empresa pregunta si alguna interfaz tiende a recibir puntuaciones más altas, por lo que se usa una prueba bilateral de suma de rangos. 
+
+```{r}
+# Aplicar la prueba de suma de rangos de Wilcoxon
+# Guía: wilcox_test() ordena los índices de ambos grupos en conjunto. La opción bilateral
+# Guía: considera diferencias en cualquiera de los dos sentidos.
+prueba_int <- datos_int |>
+  wilcox_test(Indice ~ Interfaz, alternative = "two.sided",
+              detailed = TRUE, conf.level = 1 - alfa_int) |>
+# Guía: Se conservan los grupos, sus tamaños, el estadístico y el valor p. detailed agrega
+# Guía: el estimador de Hodges-Lehmann y el intervalo correspondiente.
+  dplyr::select(group1, group2, n1, n2, statistic, p,
+                estimate, conf.low, conf.high) |>
+  mutate(across(c(p, estimate, conf.low, conf.high), ~ num(., digits = 3)))
+cat("Prueba de suma de rangos de Wilcoxon\n")
+cat("------------------------------------\n")
+print(prueba_int, width = Inf)
+
+# Calcular el tamaño del efecto
+# Guía: wilcox_effsize() informa el tamaño del efecto r asociado a la comparación por
+# Guía: rangos. Este resultado acompaña la decisión basada en el valor p.
+efecto_int <- datos_int |> wilcox_effsize(Indice ~ Interfaz) |>
+  mutate(effsize = num(effsize, digits = 3))
+cat("\nTamaño del efecto\n")
+cat("-----------------\n")
+print(efecto_int)
+```
+
+## Script 10.15: (continuación del script 10.14) participantes por interfaz para detectar un efecto mediano.
+
+Para una futura repetición del estudio de las interfaces, se calcula cuántas personas por grupo se necesitarían para detectar un efecto mediano con poder de 80 %. La lectura usa primero una referencia paramétrica y luego aplica una corrección para planificar con Wilcoxon. 
+
+```{r}
+# Planificar: participantes por interfaz para detectar un efecto mediano con
+# la prueba t, y corregidos por la eficiencia relativa mínima de la prueba.
+# Guía: pwr.t.test() calcula el tamaño por grupo para una t bilateral de dos muestras
+# Guía: independientes con d = 0.5.
+plan_int <- pwr.t.test(d = 0.5, sig.level = alfa_int, power = 0.80,
+                       type = "two.sample", alternative = "two.sided")
+# Guía: ceiling() redondea hacia arriba al número entero de participantes. Para Wilcoxon se
+# Guía: divide el tamaño paramétrico sin redondear por 0.864, según la regla de eficiencia
+# Guía: usada por la lectura.
+n_t <- ceiling(plan_int[["n"]])
+n_w <- ceiling(plan_int[["n"]] / 0.864)
+cat("\nParticipantes por interfaz con la prueba t:", n_t, "\n")
+cat("Con la prueba de Wilcoxon:", n_w, "\n")
+```
+
+## Script 10.16: prueba de rangos con signo de Wilcoxon y tamaño del efecto para el ejemplo.
+
+Dos asistentes de IA generan código para los mismos diez módulos. La respuesta es el porcentaje de pruebas superadas por el código de cada asistente. Cada módulo aporta un par A y B, y la pregunta es si A tiende a superar a B dentro de un mismo módulo. 
+
+```{r}
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(tibble)
+
+# Crear la matriz de datos en formato largo: el porcentaje de pruebas que
+# superó el código que generó cada asistente para cada módulo.
+# Guía: La posición de cada porcentaje identifica el mismo módulo en ambos vectores. Esa
+# Guía: correspondencia debe conservarse al formar la tabla larga.
+Asistente_A <- c(97.2, 97.9, 87.6, 93.9, 89.3, 91.6, 94.1, 96.0, 97.0, 93.3)
+Asistente_B <- c(97.4, 97.5, 86.8, 90.9, 89.0, 87.8, 92.0, 93.0, 96.1, 90.0)
+datos_ia <- data.frame(Modulo = factor(rep(1:10, 2)),
+                       Asistente = factor(rep(c("A", "B"), each = 10)),
+                       Porcentaje = c(Asistente_A, Asistente_B))
+
+# Graficar las diferencias A - B de cada módulo
+# Guía: Se calcula una diferencia A - B por módulo. Los gráficos ayudan a detectar
+# Guía: asimetrías marcadas y a examinar la forma de esas diferencias.
+dif_ia <- data.frame(Diferencia = Asistente_A - Asistente_B)
+h_ia <- gghistogram(dif_ia, x = "Diferencia", binwidth = 0.5,
+                    color = "steelblue", fill = "steelblue", alpha = 0.7,
+                    xlab = "Diferencia A - B", ylab = "Frecuencia")
+q_ia <- ggqqplot(dif_ia, x = "Diferencia", color = "steelblue",
+                 xlab = "Cuantil teórico", ylab = "Diferencia A - B")
+plot_ia <- ggarrange(h_ia, q_ia, ncol = 2, nrow = 1, labels = "AUTO",
+                     font.label = list(size = 10, color = "steelblue"))
+print(plot_ia)
+
+# Definir el nivel de significación
+# Guía: alfa_ia = 0.05 fija un nivel de confianza de 95 % para la estimación.
+alfa_ia <- 0.05
+
+# Aplicar la prueba de rangos con signo de Wilcoxon (A - B, unilateral)
+# Guía: paired conserva la correspondencia por posición dentro de cada grupo. greater
+# Guía: evalúa si las diferencias A - B tienden a ser positivas.
+prueba_ia <- datos_ia |>
+  wilcox_test(Porcentaje ~ Asistente, paired = TRUE,
+              alternative = "greater", detailed = TRUE,
+              conf.level = 1 - alfa_ia) |>
+# Guía: La salida muestra V, el valor p y la estimación de localización de las diferencias
+# Guía: con su intervalo unilateral.
+  dplyr::select(group1, group2, n1, statistic, p,
+                estimate, conf.low, conf.high) |>
+  mutate(across(c(p, estimate, conf.low), ~ num(., digits = 3)))
+cat("Prueba de rangos con signo de Wilcoxon\n")
+cat("--------------------------------------\n")
+print(prueba_ia, width = Inf)
+
+# Calcular el tamaño del efecto
+# Guía: El tamaño del efecto r se calcula con el mismo diseño apareado y la misma dirección
+# Guía: de la alternativa.
+efecto_ia <- datos_ia |>
+  wilcox_effsize(Porcentaje ~ Asistente, paired = TRUE,
+                 alternative = "greater") |>
+  mutate(effsize = num(effsize, digits = 3))
+cat("\nTamaño del efecto\n")
+cat("-----------------\n")
+print(efecto_ia)
+```
+
+## Script 10.17: evaluación de las condiciones para aplicar un procedimiento ANOVA al ejemplo.
+
+Un estudiante compara cuatro criterios para optimizar una secuencia de ocho operaciones `join`. Cada una de 43 bases de datos públicas se asigna a un solo criterio. Los vectores contienen los tiempos de ejecución en segundos de la tabla 10.7. El script explora los tiempos y revisa si es razonable aplicar ANOVA a los cuatro grupos independientes. 
+
+```{r}
+library(dplyr)
+library(ggpubr)
+library(pwr)
+library(rstatix)
+library(tibble)
+
+# Crear la matriz de datos en formato largo: el tiempo [s] de la secuencia de
+# operaciones join en cada base de datos, según el criterio que la optimizó.
+# Guía: Cada tiempo representa una base de datos distinta. Las etiquetas creadas con rep()
+# Guía: identifican el criterio asignado a esa base.
+A <- c(95, 36, 58, 11, 56, 77, 49, 9, 11, 29, 28, 13)
+B <- c(22, 63, 26, 20, 24, 23, 23, 24, 53)
+C <- c(39, 77, 26, 34, 26, 26, 8, 49, 28, 40, 64, 7, 11, 7)
+D <- c(14, 8, 15, 10, 20, 6, 10, 13)
+Criterio <- c(rep("A", length(A)), rep("B", length(B)),
+              rep("C", length(C)), rep("D", length(D)))
+datos_joins <- data.frame(Criterio = factor(Criterio),
+                          Tiempo = c(A, B, C, D))
+
+# Definir el nivel de significación
+# Guía: Este alfa se reutiliza para interpretar los resultados y planificar el tamaño
+# Guía: muestral más adelante.
+alfa_joins <- 0.05
+
+# Graficar los tiempos de cada criterio
+# Guía: Las cajas resumen los tiempos por criterio. add = 'jitter' agrega cada observación
+# Guía: con un pequeño desplazamiento horizontal para mostrar mejor los puntos.
+cajas_joins <- ggboxplot(datos_joins, x = "Criterio", y = "Tiempo",
+                         color = "steelblue", fill = "steelblue",
+                         alpha = 0.3, add = "jitter",
+                         xlab = "Criterio", ylab = "Tiempo [s]")
+print(cajas_joins)
+
+# Evaluar las condiciones de ANOVA: normalidad de cada grupo y homocedasticidad
+# Guía: Shapiro-Wilk revisa normalidad dentro de cada criterio. Levene contrasta la
+# Guía: igualdad de varianzas entre los cuatro grupos.
+normalidad <- datos_joins |> group_by(Criterio) |> shapiro_test(Tiempo) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+cat("Prueba de Shapiro-Wilk en cada grupo\n")
+cat("------------------------------------\n")
+print(normalidad)
+levene <- datos_joins |> levene_test(Tiempo ~ Criterio) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+cat("\nPrueba de Levene\n")
+cat("----------------\n")
+print(levene)
+
+# Evaluar si las dispersiones difieren, con la prueba de Fligner-Killeen
+# Guía: Fligner-Killeen complementa la revisión de dispersión. En el ejemplo, la evidencia
+# Guía: de dispersiones distintas limita una interpretación de la comparación en términos
+# Guía: de medianas.
+cat("\nPrueba de Fligner-Killeen\n")
+cat("-------------------------\n")
+print(fligner.test(Tiempo ~ Criterio, data = datos_joins))
+```
+
+## Script 10.18: (continuación del script 10.17) prueba de Kruskal-Wallis y tamaño del efecto para el ejemplo.
+
+En el ejemplo de las consultas `join`, los diagnósticos del script 10.17 dan evidencia de problemas de normalidad en un grupo y de dispersiones distintas. Se reutiliza `datos_joins` para comparar los cuatro criterios mediante la prueba global de Kruskal-Wallis. 
+
+```{r}
+# Aplicar la prueba de Kruskal-Wallis y calcular el tamaño del efecto
+# Guía: Kruskal-Wallis ordena todos los tiempos juntos y compara cómo se distribuyen los
+# Guía: rangos entre criterios. El valor p es global y las comparaciones por pares quedan
+# Guía: para el script siguiente.
+prueba_joins <- datos_joins |> kruskal_test(Tiempo ~ Criterio) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+cat("Prueba de Kruskal-Wallis\n")
+cat("------------------------\n")
+print(prueba_joins)
+# Guía: kruskal_effsize() calcula el eta cuadrado basado en H, una medida de la magnitud
+# Guía: del efecto en la escala de rangos.
+efecto_joins <- datos_joins |> kruskal_effsize(Tiempo ~ Criterio) |>
+  mutate(effsize = num(effsize, digits = 3))
+cat("\nTamaño del efecto\n")
+cat("-----------------\n")
+print(efecto_joins)
+```
+
+## Script 10.19: (continuación del script 10.18) post hoc con Holm y con Benjamini y Hochberg para el ejemplo.
+
+Tras el resultado global de Kruskal-Wallis se examina entre qué criterios aparecen diferencias. Como cada base de datos pertenece a un solo criterio, las seis comparaciones de a pares usan suma de rangos para grupos independientes. 
+
+```{r}
+# Comparar los pares con la prueba de suma de rangos de Wilcoxon, ajustando
+# con Holm y con Benjamini y Hochberg.
+# Guía: pairwise_wilcox_test() devuelve los valores p crudos y p.adj con Holm. Luego se
+# Guía: calcula BH sobre los p crudos de la misma familia de comparaciones.
+pares_joins <- datos_joins |>
+  pairwise_wilcox_test(Tiempo ~ Criterio, p.adjust.method = "holm") |>
+  mutate(p.BH = p.adjust(p, method = "BH")) |>
+  dplyr::select(group1, group2, n1, n2, statistic, p, p.Holm = p.adj, p.BH) |>
+  mutate(across(c(p, p.Holm, p.BH), ~ num(., digits = 4)))
+# Guía: p.Holm es el ajuste principal de la lectura. p.BH permite ver si la decisión sobre
+# Guía: cada par cambia con el otro ajuste.
+cat("\nPruebas de suma de rangos por pares\n")
+cat("-----------------------------------\n")
+print(pares_joins, width = Inf)
+```
+
+## Script 10.20: (continuación del script 10.19) bases de datos por criterio para detectar un efecto mediano.
+
+Se planifica una repetición del experimento de los cuatro criterios de optimización. El objetivo es estimar cuántas bases de datos asignar a cada criterio para detectar un efecto mediano con poder de 80 %, usando el nivel de significación definido en el script 10.17. 
+
+```{r}
+# Planificar: bases de datos por criterio para detectar un efecto mediano con
+# ANOVA, y corregidas por la eficiencia relativa mínima de la prueba.
+# Guía: pwr.anova.test() devuelve el tamaño por criterio para cuatro grupos balanceados con
+# Guía: f = 0.25.
+plan_joins <- pwr.anova.test(k = 4, f = 0.25, sig.level = alfa_joins,
+                             power = 0.80)
+# Guía: Se redondea hacia arriba el tamaño de ANOVA. Para Kruskal-Wallis se aplica la regla
+# Guía: de eficiencia al tamaño sin redondear antes de tomar el entero superior.
+n_anova <- ceiling(plan_joins[["n"]])
+n_kw <- ceiling(plan_joins[["n"]] / 0.864)
+cat("\nBases de datos por criterio con ANOVA:", n_anova, "\n")
+cat("Con la prueba de Kruskal-Wallis:", n_kw, "\n")
+```
+
+## Script 10.21: prueba de Friedman, tamaño del efecto y post hoc con Holm y con Benjamini y Hochberg para el ejemplo.
+
+Quince participantes evalúan las tres interfaces de una aplicación en orden aleatorio. Cada índice de la tabla 10.10 promedia seis calificaciones en escala Likert de cinco puntos. Como se repiten las mediciones por persona, Friedman compara las interfaces dentro de cada participante y el post hoc conserva ese emparejamiento. 
+
+```{r}
+library(dplyr)
+library(rstatix)
+library(tibble)
+
+# Crear la matriz de datos en formato largo: el índice de usabilidad que dio
+# cada participante a cada interfaz.
+# Guía: La misma posición de A, B y C corresponde a una misma persona. En formato largo
+# Guía: quedan tres filas por participante, una por interfaz.
+A <- c(3.6, 4.2, 3.5, 3.2, 3.6, 3.5, 3.3, 3.5, 4.1, 3.7, 4.0, 3.5, 3.3,
+       3.4, 3.6)
+B <- c(4.4, 5.0, 4.3, 3.6, 4.5, 4.2, 3.9, 4.3, 4.8, 4.5, 4.8, 4.2, 3.7,
+       4.0, 4.5)
+C <- c(4.9, 5.0, 4.7, 3.2, 5.0, 4.6, 3.6, 4.9, 5.0, 5.0, 5.0, 4.4, 3.2,
+       3.7, 4.9)
+datos_fri <- data.frame(Participante = factor(rep(1:15, 3)),
+                        Interfaz = factor(rep(c("A", "B", "C"), each = 15)),
+                        Indice = c(A, B, C))
+
+# Definir el nivel de significación
+# Guía: El ejemplo fija alfa en 0.01 porque cambiar la interfaz es costoso y se quiere
+# Guía: exigir más evidencia.
+alfa_fri <- 0.01
+
+# Aplicar la prueba de Friedman y calcular el tamaño del efecto
+# Guía: En la fórmula, el identificador después de | define el bloque. Friedman ordena las
+# Guía: tres puntuaciones dentro de cada participante y calcula un valor p global.
+prueba_fri <- datos_fri |> friedman_test(Indice ~ Interfaz | Participante) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+cat("Prueba de Friedman\n")
+cat("------------------\n")
+print(prueba_fri)
+# Guía: friedman_effsize() informa la W de Kendall. La medida resume cuánto coinciden los
+# Guía: participantes en el orden de las interfaces.
+efecto_fri <- datos_fri |>
+  friedman_effsize(Indice ~ Interfaz | Participante) |>
+  mutate(effsize = num(effsize, digits = 3))
+cat("\nTamaño del efecto\n")
+cat("-----------------\n")
+print(efecto_fri)
+
+# Comparar los pares con la prueba de rangos con signo de Wilcoxon,
+# ajustando con Holm y con Benjamini y Hochberg.
+# Guía: El post hoc conserva los pares mediante paired = TRUE. Los participantes aparecen
+# Guía: en el mismo orden en los tres grupos. Se ajustan los p con Holm y se calcula BH
+# Guía: para comparar decisiones.
+pares_fri <- datos_fri |>
+  pairwise_wilcox_test(Indice ~ Interfaz, paired = TRUE,
+                       p.adjust.method = "holm") |>
+  mutate(p.BH = p.adjust(p, method = "BH")) |>
+  dplyr::select(group1, group2, n1, statistic, p, p.Holm = p.adj, p.BH) |>
+  mutate(across(c(p, p.Holm, p.BH), ~ num(., digits = 4)))
+# Guía: Al leer la tabla, se usa p.Holm para la decisión principal de cada par y p.BH como
+# Guía: análisis de sensibilidad.
+cat("\nPruebas de rangos con signo por pares\n")
+cat("-------------------------------------\n")
+print(pares_fri, width = Inf)
+```

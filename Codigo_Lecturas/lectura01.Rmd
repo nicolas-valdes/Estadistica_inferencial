@@ -1,0 +1,327 @@
+---
+title: "Lectura 01"
+author: "Nicolás Valdés"
+date: "2026-10-15"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(utils)
+library(base)
+
+```
+
+
+## Script 1.1: sentencias para importar un conjunto de datos.
+```{r}
+# Cargar un conjunto de datos disponible en R
+datos1 <- mtcars
+
+# Importar desde un archivo de texto plano delimitado por tabuladores
+#datos2 <- read.delim(file.choose())
+
+# Importar desde un archivo de valores separados por coma en formato
+# inglés.
+#datos3 <- read.csv("C:\\Inferencia\\ejemplo1-csv-eng.csv")
+
+# Configurar carpeta de trabajo
+#setwd("C:\\Inferencia")
+
+# Importar desde un archivo de valores separados por coma en formato
+# español.
+#datos4 <- read.csv2("ejemplo1-csv-esp.csv")
+
+# Mostrar las primeras 6 filas del conjunto de datos almacenado en
+# la variable 'datos1'.
+#head(datos1)
+
+# Mostrar las últimas 6 filas del conjunto de datos almacenado en
+# la variable 'datos1'.
+#tail(datos1)
+```
+
+
+
+## Script 1.2: instalar y cargar paquetes de R.
+```{r}
+# Instalar un paquete
+#install.packages("ggpubr")
+
+# Primera forma de importar un paquete
+library(ggpubr)
+
+# Segunda forma de importar un paquete
+require(ggplot2)
+
+# Importar un paquete, instalándolo de ser necesario
+if(!require(dplyr)){
+  install.packages("dplyr", dependencies = TRUE)
+  require(dplyr)
+}
+```
+
+
+
+## Script 1.3: construir una matriz de datos.
+```{r}
+# Crear un vector de strings y guardarlo en la variable 'nombre'
+nombre <- c("Alan Brito Delgado",
+            "Zacarías Labarca del Río",
+            "Elsa Payo Maduro")
+
+# Crear un vector de fechas y guardarlo en la variable 'fecha_nacimiento'
+fecha_nacimiento <- as.Date(c("2008-01-25", "2006-10-04", "2008-03-27"))
+
+# Crear tres vectores de valores flotantes entre 1.0 y 7.0 y guardarlos
+# en 'prueba_1', 'prueba_2' y 'prueba_3'.
+prueba_1 <- c(5.5, 3.4, 4.5)
+prueba_2 <- c(3.2, 4.7, 4.1)
+prueba_3 <- c(4.8, 4.3, 5.1)
+
+# Construir una matriz de datos a partir de los vectores anteriores y
+# guardarlo en la variable 'datos'.
+datos <- data.frame(nombre, fecha_nacimiento, 
+                    prueba_1, prueba_2, prueba_3)
+
+# Define el nombre del archivo de salida
+salida = "" # Corresponde a la consola
+
+# Guardar la matriz de datos creada en un archivo csv en el formato inglés
+write.csv(datos, salida)
+
+# Escribe una línea en blanco en un archivo (en modo 'append')
+write("", salida)
+
+# Guardar la matriz de datos creada en un archivo csv en el formato español,
+# sin incluir los nombres de las observaciones. 
+write.csv2(datos, salida, row.names = FALSE)
+```
+
+
+## Script 1.4: modificaciones sencillas de una matriz de datos.
+```{r}
+# Leer una matriz de datos desde un archivo CSV en formato español
+#datos <- read.csv2("Lectura01/Ejemplo.csv")
+
+# Eliminar la columna 'fecha_nacimiento' de la matriz de datos
+#datos[["fecha_nacimiento"]] <- NULL
+
+# Agregar la columna 'edad' a de la matriz de datos
+#datos[["edad"]] <- c(23, 25, 23)
+
+# Crear una nueva observación
+nueva <- data.frame(nombre="Elba Calao del Río",
+                    prueba_1 = 6.4, prueba_2 = 2.3, prueba_3 = 4.6,
+                    edad = 24)
+
+# Agregar la nueva observación a de la matriz de datos
+#datos <- rbind(datos, nueva)
+
+# Eliminar las primeras 3 observaciones de de la matriz de datos
+#datos <- datos[-c(1:3), ]
+
+# Guardar de la matriz de datos en un archivo csv en español
+#write.csv2(datos, "Ejemplo_cambiado.csv", row.names = FALSE)
+```
+
+
+## Script 1.5: modificación de una matriz de datos con el paquete dplyr.
+```{r}
+library(dplyr)
+
+# Cargar dataframe iris incluido en R.
+datos <- iris
+
+# Seleccionar observaciones correspondientes a la especie versicolor
+versicolor <- datos |> filter(Species == "versicolor")
+
+# Seleccionar observaciones de la especie versicolor cuyos sépalos tengan una
+# longitud igual o superior a 6 cm.
+largas <- datos |> filter(Species == "versicolor" & Sepal.Length >= 6)
+
+# Seleccionar la especie y variables relativas a los pétalos
+petalos <- datos |> select(Species, starts_with("Petal"))
+
+# Seleccionar variables de ancho y la especie
+anchos <- datos |> select(ends_with("Width"), Species)
+
+# Agregar al conjunto de datos de los pétalos una nueva variable con la razón
+# entre el largo y el ancho de estos.
+petalos <- petalos |> mutate(Petal.Ratio = Petal.Length / Petal.Width)
+
+# Ordenar el conjunto de datos de pétalos en forma descendente según la razón
+# de los pétalos.
+petalos <- petalos |> arrange(desc(Petal.Ratio))
+
+# Ordenar el conjunto de datos de pétalos en forma ascendente según el largo de
+# los pétalos.
+petalos <- petalos |> arrange(Petal.Length)
+```
+
+
+## Script 1.6: definición de los datos originales para el ejemplo de cambio de formato de una matriz de datos.
+```{r}
+library(tidyr)
+
+# Crear la matriz de datos
+Instancia <- 1:6
+Quicksort  <- c(23.2, 22.6, 23.4, 23.3, 21.8, 23.9)
+Bubblesort <- c(31.6, 29.3, 30.7, 30.8, 29.8, 30.3)
+Radixsort  <- c(30.1, 28.4, 28.7, 28.3, 29.9, 29.1)
+Mergesort  <- c(25.0, 25.7, 25.7, 23.7, 25.5, 24.7)
+datos <- data.frame(Instancia, Quicksort, Bubblesort, Radixsort, Mergesort)
+
+# Mostrar las primeras filas de la matriz de datos
+cat("Datos originales:\n")
+cat("----------------\n")
+print(head(datos))
+cat("\n")
+
+# Convertir la matriz de datos a formato largo
+datos_largos <- datos |>
+  pivot_longer(c("Quicksort", "Bubblesort", "Radixsort", "Mergesort"),
+               names_to = "Algoritmo", values_to = "Tiempo")
+
+# Mostrar las primeras filas de la matriz de datos largos
+cat("Datos largos:\n")
+cat("------------\n")
+print(head(datos_largos))
+cat("\n")
+
+# Convertir la matriz de datos largos a formato ancho
+datos_anchos <- datos_largos|>
+  pivot_wider(names_from = "Algoritmo", values_from = "Tiempo")
+
+# Mostrar las primeras filas de la matriz de datos largos.
+cat("Datos anchos:\n")
+cat("------------\n")
+print(head(datos_anchos))
+cat("\n")
+```
+
+
+## Script 1.7: cambio de formato de una matriz de datos a uno más largo.
+```{r}
+library(tidyr)
+
+# Crear la matriz de datos
+Instancia <- 1:6
+Quicksort  <- c(23.2, 22.6, 23.4, 23.3, 21.8, 23.9)
+Bubblesort <- c(31.6, 29.3, 30.7, 30.8, 29.8, 30.3)
+Radixsort  <- c(30.1, 28.4, 28.7, 28.3, 29.9, 29.1)
+Mergesort  <- c(25.0, 25.7, 25.7, 23.7, 25.5, 24.7)
+datos <- data.frame(Instancia, Quicksort, Bubblesort, Radixsort, Mergesort)
+
+# Mostrar las primeras filas de la matriz de datos
+cat("Datos originales:\n")
+cat("----------------\n")
+print(head(datos))
+cat("\n")
+
+# Convertir la matriz de datos a formato largo
+datos_largos <- datos |>
+  pivot_longer(c("Quicksort", "Bubblesort", "Radixsort", "Mergesort"),
+               names_to = "Algoritmo", values_to = "Tiempo")
+
+# Mostrar las primeras filas de la matriz de datos largos
+cat("Datos largos:\n")
+cat("------------\n")
+print(head(datos_largos))
+cat("\n")
+
+# Convertir la matriz de datos largos a formato ancho
+datos_anchos <- datos_largos|>
+  pivot_wider(names_from = "Algoritmo", values_from = "Tiempo")
+
+# Mostrar las primeras filas de la matriz de datos largos.
+cat("Datos anchos:\n")
+cat("------------\n")
+print(head(datos_anchos))
+cat("\n")
+```
+
+
+
+## Script 1.8: cambio de formato de una matriz de datos a uno más ancho.
+```{r}
+library(tidyr)
+
+# Crear la matriz de datos
+Instancia <- 1:6
+Quicksort  <- c(23.2, 22.6, 23.4, 23.3, 21.8, 23.9)
+Bubblesort <- c(31.6, 29.3, 30.7, 30.8, 29.8, 30.3)
+Radixsort  <- c(30.1, 28.4, 28.7, 28.3, 29.9, 29.1)
+Mergesort  <- c(25.0, 25.7, 25.7, 23.7, 25.5, 24.7)
+datos <- data.frame(Instancia, Quicksort, Bubblesort, Radixsort, Mergesort)
+
+# Mostrar las primeras filas de la matriz de datos
+cat("Datos originales:\n")
+cat("----------------\n")
+print(head(datos))
+cat("\n")
+
+# Convertir la matriz de datos a formato largo
+datos_largos <- datos |>
+  pivot_longer(c("Quicksort", "Bubblesort", "Radixsort", "Mergesort"),
+               names_to = "Algoritmo", values_to = "Tiempo")
+
+# Mostrar las primeras filas de la matriz de datos largos
+cat("Datos largos:\n")
+cat("------------\n")
+print(head(datos_largos))
+cat("\n")
+
+# Convertir la matriz de datos largos a formato ancho
+datos_anchos <- datos_largos|>
+  pivot_wider(names_from = "Algoritmo", values_from = "Tiempo")
+
+# Mostrar las primeras filas de la matriz de datos largos.
+cat("Datos anchos:\n")
+cat("------------\n")
+print(head(datos_anchos))
+cat("\n")
+```
+
+
+## Script 1.9: modificación del conjunto de datos mtcars para facilitar su comprensión.
+```{r}
+library(dplyr)
+
+# Cargar conjunto de datos y filtrar pesos muy bajos o muy altos
+datos <- mtcars |> filter(wt > 2 & wt < 5)
+
+# Renombrar columnas
+datos <- datos |> rename(Rendimiento = mpg, Cilindrada = cyl,
+                         Desplazamiento = disp, Potencia = hp,
+                         Eje = drat, Peso = wt, Cuarto_milla = qsec,
+                         Motor = vs, Transmision = am, Cambios = gear,
+                         Carburadores = carb)
+
+# Dar formato categórico a las variables Motor, Transmision, Cilindrada y Cambios,
+# renombrando sus niveles.
+datos[["Motor"]] <- factor(datos[["Motor"]], levels = c(0, 1),
+                           labels = c("V", "Recto"))
+
+datos[["Transmision"]] <- factor(datos[["Transmision"]], levels = c(0, 1),
+                                 labels = c("Automático", "Manual"))
+
+datos[["Cilindrada"]] <- factor(datos [["Cilindrada"]], levels = c(4, 6, 8),
+                                labels = c("4 cilindros", "6 cilindros", "8 cilindros"),
+                                ordered = TRUE)
+
+datos[["Cambios"]] <- factor(datos[["Cambios"]], levels = c(3, 4, 5),
+                             labels = c("3 cambios", "4 cambios", "5 cambios"),
+                             ordered = TRUE)
+
+# Guarda el conjunto de datos con nuevos nombres y etiquetas
+write.csv2(datos , "Mtcars.csv")
+```
+
+

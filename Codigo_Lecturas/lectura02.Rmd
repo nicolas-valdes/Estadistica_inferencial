@@ -1,0 +1,324 @@
+---
+title: "Lectura 02"
+author: "Nicolás Valdés"
+date: "2026-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Cap 3: Variables aleatorias y distribuciones de probabilidad
+
+## Script 3.1: estadísticas descriptivas de una variable aleatoria discreta.
+```{r}
+# Crear una variable discreta para representar el dado adulterado
+resultados <- 1:6
+probabilidades <- c(0.25, 0.125, 0.125, 0.125, 0.125, 0.25)
+
+# Calcular y mostrar el valor esperado
+esperado <- sum(resultados * probabilidades)
+cat("Valor esperado:", esperado, "\n")
+
+# Calcular y mostrar la varianza
+varianza <- sum(((resultados - esperado) ^ 2) * probabilidades)
+cat("Varianza:", varianza, "\n")
+
+# Calcular y mostrar la desviación estándar
+desviacion <- sqrt(varianza)
+cat("Desviación estándar:", desviacion, "\n")
+```
+
+
+## Script 3.2: distribución de la suma de los puntos de varios lanzamientos de un dado cargado.
+```{r}
+# Suma de la misma variable aleatoria discreta en experimentos mutuamente independientes.
+# Parámetros:
+#   pr: un vector de con la distribución de probabilidad. Los nombres asociados a cada
+#       elemento del vector corresponde a los posibles resultados de la variable aleatoria,
+#       que deben ser valores enteros distintos.
+#    n: el número de experimentos
+suma_vadi <- function(pr, n = 2) {
+  probs <- pr
+  i <- 2
+  # Como un resultado depende del resultado anterior, se usa un ciclo tradicional
+  while(i <= n) {
+    # Calcular el producto de los vectores de probabilidades
+    npr <- outer(probs, pr, FUN = "*")
+    # Obtener el resultado del lanzamiento correspondientes a cada probabilidad
+    nout <- outer(as.numeric(names(probs)), as.numeric(names(pr)), FUN = "+")
+    # Obtener las nuevas probabilidades sumando las correspondientes a cada resultado
+    probs <- tapply(npr, nout, sum)
+    i <- i + 1
+  }
+  # Devolver las probabilidades resultantes
+  invisible(probs)
+}
+
+# Crear una variable discreta para representar el dado adulterado
+resultados <- 1:6
+probabilidades = c(0.25, 0.125, 0.125, 0.125, 0.125, 0.25)
+names(probabilidades) <- resultados
+
+# Calcular la distribución de la suma de los puntos para 1, 2, 4, 9, 16 y 25 lanzamientos
+lanzamientos <- c(1, 2, 4, 9, 16, 25)
+sumas <- lapply(lanzamientos, function(n) suma_vadi(probabilidades, n = n))
+names(sumas) <- lanzamientos
+
+# Mostrar la distribución de la suma para 2 lanzamientos
+print(sumas[["2"]])
+```
+
+
+
+## Script 3.3: cuatro distribuciones normales con igual media y distinta desviación estándar.
+```{r}
+library(ggpubr)
+library(latex2exp)
+
+# Definir las distribuciones normales del ejemplo
+medias <- c(10, 10, 10, 10)
+sigmas <- c(1, 2, 3, 4)
+vars <- sigmas ** 2
+# Crear las etiquetas para cada ejemplo usando LaTeX
+labels_str <- sprintf(r'($\textit{N}(\small{\mu=%d,\sigma^2=%d})$)', medias, vars)
+
+# Construir las distribuciones normales
+x <- seq(-5, 25, 0.01)
+y1 <- dnorm(x, mean = medias[1], sd = sigmas[1])
+y2 <- dnorm(x, mean = medias[2], sd = sigmas[2])
+y3 <- dnorm(x, mean = medias[3], sd = sigmas[3])
+y4 <- dnorm(x, mean = medias[4], sd = sigmas[4])
+
+# Juntar las distribuciones de ejemplo en una sola matriz de datos
+n <- length(x)
+y = c(y1, y2, y3, y4)
+ejemplo <- factor(rep(sigmas, each = n))
+datos_norm <- data.frame(x, y, ejemplo)
+
+# Graficar las distribuciones normales
+g <- ggline(datos_norm, "x", "y", numeric.x.axis = TRUE, plot_type = "l",
+            title = "Ejemplos de distribuciones normales", xlab = FALSE, ylab = FALSE,
+            color = "ejemplo")
+
+# Desplegar las leyendas usando una interfaz tipo LaTeX, que la función TeX() trasforma
+# en expresiones que pueden ser entendidas por los diferentes dispositivos gráficos
+# (como SVG, PDF, PostScript, etc.), cambiando los colores usados por omisión.
+colores <- c("steelblue", "steelblue1", "steelblue3", "steelblue4")
+g <- ggpar(g, legend = c(0.8, 0.7))
+g <- ggpar(g, legend.title = "Distribución")
+g <- ggpar(g, font.legend = c(10, "plain", "black"))
+g <- g + scale_color_discrete(labels = lapply(labels_str, TeX), type = colores)
+g <- g + theme(legend.text = element_text(family = "serif", size = 14))
+# Mostrar el gráfico
+print(g)
+```
+
+
+## Script 3.4: creación de un gráfico cuantil-cuantil.
+```{r}
+library(ggpubr)
+
+# Cargar datos
+#datos <- read.csv2("Lectura02/Mtcars.csv", stringsAsFactors = TRUE, row.names = 1)
+
+###datos <- mtcars
+###names(datos)[names(datos) == "mpg"] <- "Rendimiento"
+
+
+# Construir gráfico Q-Q para la variable Rendimiento
+###g <- ggqqplot(datos, x = "Rendimiento", color = "steelblue", alpha = 0.7)
+
+# Mostrar el gráfico conseguido
+###print(g)
+```
+
+
+# Cap 4: Fundamentos para la inferencia
+
+## Script 4.1: representación gráfica de la media móvil.
+```{r}
+library(ggpubr)
+
+# Establecer la semilla para generar los mismos números aleatorios cada vez que
+# se ejecute el script.
+set.seed(9373)
+
+# Generar aleatoriamente una población de tamaño 1.000 (en este caso, siguiendo
+# una distribución normal).
+poblacion <- rnorm(n = 1000, mean = 4.32, sd = 0.98)
+
+# Calcular la media de la población
+media_poblacion <- mean(poblacion)
+cat("Media de la población:", media_poblacion, "\n")
+
+# Tomar una muestra de tamaño 220
+tamano_muestra <- 220
+muestra <- sample(poblacion, tamano_muestra)
+
+# Calcular las medias acumuladas (es decir, con muestras de 1, 2, 3, ... elementos)
+n <- seq(along = muestra)
+media <- cumsum(muestra) / n
+
+# Crear una matriz de datos con los tamaños y las medias muestrales obtenidas
+datos <- data.frame(n, media)
+
+# Graficar las medias muestrales
+g <- ggline(data = datos, x = "n", y = "media", title = "Media móvil",
+            xlab = "Tamaño de la muestra considerada", ylab = "Media muestral",
+            plot_type = "l", color = "steelblue", alpha = 0.7)
+
+# Añadir al gráfico una recta con la media de la población
+g <- g + annotate("segment", x = 0, y = media_poblacion,
+                  xend = tamano_muestra, yend = media_poblacion,
+                  colour = "steelblue2", alpha = 0.7,
+                  linewidth = 1, linetype = "dashed")
+
+# Mostrar el gráfico generado
+print(g)
+```
+
+
+## Script 4.2: distribución muestral de la media.
+```{r}
+library(ggpubr)
+
+# Fijar la semilla para generar los mismos números pseudoaleatorios cada vez
+set.seed(9373)
+
+# Generar aleatoriamente una población de tamaño 1.500, suponiendo que sigue
+# una distribución normal) con media 4,32 y desviación estándar 0,98.
+poblacion <- rnorm(n = 1500, mean = 4.32, sd = 0.98)
+
+# Calcular y mostrar la media de la población
+media_poblacion <- mean(poblacion)
+cat("Media de la población:", media_poblacion, "\n")
+
+# Tomar 1.000 muestras de tamaño 100. Quedan almacenadas como una matriz donde cada
+# columna es una muestra.
+tamano_muestra <- 100
+repeticiones <- 1000
+
+muestras <- replicate(repeticiones, sample(poblacion, tamano_muestra))
+
+# Calcular medias muestrales y almacenar los resultados con tipo data.frame
+medias <- colMeans(muestras)
+medias <- as.data.frame(medias)
+
+# Construir un histograma de las medias muestrales, marcando la media de los datos
+g <- gghistogram(data = medias, x = "medias", bins = 20,
+                 title = "Distribución de la media muestral",
+                 xlab = "Media", ylab = "Frecuencia",
+                 color = "steelblue", fill = "steelblue", alpha = 0.7,
+                 add = "mean", add.params = list(color = "steelblue4", linetype = "dashed"))
+
+# Mostrar el gráfico obtenido
+print(g)
+```
+
+
+## Script 4.3: cálculo del valor p para una prueba de una cola.
+```{r}
+library(ggpubr)
+
+# Definir los datos de las hipótesis
+desv_est_pob <- 48
+valor_nulo <- 530
+tam_muestra_nueva <- 1600
+prom_muestra_nueva <- 527.9
+error_est <- desv_est_pob / sqrt(tam_muestra_nueva)
+
+# Obtener curva de la distribución muestral de la media
+x <- seq(valor_nulo - 5.2 * error_est, valor_nulo + 5.2 * error_est, 0.01)
+y <- dnorm(x, mean = valor_nulo, sd = error_est)
+dist_muestral <- data.frame(x, y)
+
+# Graficar la distribución muestral
+g <- ggplot(data = dist_muestral, aes(x))
+g <- g + stat_function(fun = dnorm, args = list(mean = valor_nulo, sd = error_est),
+                       colour = "steelblue", alpha = 0.7, linewidth = 1)
+g <- g + ylab("")
+g <- g + scale_y_continuous(breaks = NULL)
+g <- g + scale_x_continuous(name = "Tiempo de procesamiento [ms]")
+g <- g + theme_pubr()
+
+# Colorear el área igual o menor que la media observada
+g <- g + geom_area(data = subset(dist_muestral, x < prom_muestra_nueva), aes(y = y),
+                   colour = "steelblue", fill = "steelblue", alpha = 0.7)
+
+# Agregar una línea vertical para el valor nulo
+g <- g + geom_vline(aes(xintercept = valor_nulo),
+                    color = "skyblue1", alpha = 0.7, linetype = 1)
+
+# Mostrar el gráfico obtenido
+print(g)
+
+# Calcular el valor Z para la muestra
+Z <- (prom_muestra_nueva - valor_nulo) / error_est
+
+# Calcular y mostrar el valor p
+p_1 <- pnorm(Z, lower.tail = TRUE)
+cat("Valor p: ", p_1, "\n")
+
+# También se puede calcular el valor p directamente a partir de la distribución muestral
+# definida por el valor nulo y el error estándar.
+p_2 <- pnorm(prom_muestra_nueva, mean = valor_nulo, sd = error_est)
+cat("Valor p: ", p_2, "\n")
+```
+
+
+## Script 4.4: cálculo del valor p para una prueba de dos colas.
+```{r}
+library(ggpubr)
+
+# Definir los datos de las hipótesis
+desv_est_pob <- 48
+valor_nulo <- 530
+tam_muestra_nueva <- 1600
+prom_muestra_nueva <- 527.9
+error_est <- desv_est_pob / sqrt(tam_muestra_nueva)
+
+# Obtener curva de la distribución muestral de la media
+x <- seq(valor_nulo - 5.2 * error_est, valor_nulo + 5.2 * error_est, 0.01)
+y <- dnorm(x, mean = valor_nulo, sd = error_est)
+muestra <- data.frame(x, y)
+
+# Graficar la distribución muestral
+g <- ggplot(data = muestra, aes(x))
+g <- g + stat_function(fun = dnorm, args = list(mean = valor_nulo, sd = error_est),
+                       colour = "steelblue", alpha = 0.7, linewidth = 1)
+g <- g + ylab("")
+g <- g + scale_y_continuous(breaks = NULL)
+g <- g + scale_x_continuous(name = "Tiempo de procesamiento [ms]")
+g <- g + theme_pubr()
+
+# Colorear el área igual o menor que la media observada
+g <- g + geom_area(data = subset(muestra, x < prom_muestra_nueva), aes(y = y),
+                   colour = "steelblue", fill = "steelblue", alpha = 0.7)
+
+# Calcular el área bajo la cola inferior
+area_inferior <- pnorm(prom_muestra_nueva, mean = valor_nulo, sd = desv_est_pob)
+
+# Colorear igual área en la otra cola
+q_sup <- qnorm(1 - area_inferior, mean = valor_nulo, sd = desv_est_pob)
+g <- g + geom_area(data = subset(muestra, x > q_sup), aes(y = y),
+                   colour = "steelblue", fill = "steelblue", alpha = 0.7)
+
+# Agregar una línea vertical para el valor nulo
+g <- g + geom_vline(aes(xintercept = valor_nulo), color = "skyblue1")
+
+# Mostrar el gráfico conseguido
+print(g)
+
+# Calcular el valor Z para la muestra
+Z <- (prom_muestra_nueva - valor_nulo) / error_est
+
+# Calcular y mostrar el valor p (recordando ahora que la hipótesis es bilateral)
+p <- 2 * pnorm(Z, lower.tail = TRUE)
+cat("Valor p: ", p)
+```
+
+
+## 

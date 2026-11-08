@@ -1,0 +1,438 @@
+---
+title: "Lectura 06"
+author: "Nicolás Valdés"
+date: "2026-11-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Ejecutar los bloques en orden. Los comentarios agregados comienzan con `# Guía:`.
+
+## Script 9.1: datos del estudio con muestras independientes.
+
+Una ingeniera compara los tiempos de tres algoritmos, A, B y C, para resolver instancias del problema de la mochila 0-1. En este estudio ficticio, las 58 instancias de una biblioteca se reparten al azar entre los tres grupos. Cada instancia se resuelve una vez y el tiempo se mide en milisegundos.
+
+```{r}
+# Guía: Estos paquetes se cargan al inicio porque los bloques siguientes usan funciones
+# Guía: para preparar datos, graficar, hacer ANOVA y planificar el estudio.
+library(DescTools)
+library(dplyr)
+library(ggpubr)
+library(pwr)
+library(rstatix)
+library(tibble)
+library(tidyr)
+
+# Crear la matriz de datos en formato ancho: los tiempos [ms] de las 58
+# instancias de la biblioteca, repartidas al azar entre los algoritmos
+# Guía: Cada vector reúne los tiempos de las instancias asignadas a un algoritmo. A tiene
+# Guía: 20 tiempos y B y C tienen 19 cada uno.
+A <- c(22.5, 19.3, 22.2, 22.5, 23.6, 24.1, 23.0, 25.3, 24.3, 25.5,
+       25.8, 24.1, 23.3, 19.2, 20.2, 19.4, 17.1, 18.0, 19.3, 20.3)
+B <- c(23.4, 30.9, 24.6, 23.6, 23.7, 22.4, 21.2, 22.7, 22.6, 22.7,
+       18.2, 25.4, 28.5, 21.7, 25.5, 24.3, 26.1, 21.9, 27.0)
+C <- c(16.6, 19.9, 20.7, 22.8, 23.0, 21.0, 17.7, 22.1, 16.4, 24.2,
+       24.3, 23.7, 21.6, 19.9, 22.6, 23.1, 23.0, 18.5, 25.8)
+# Guía: Las columnas de un data.frame deben tener el mismo largo. Se agrega un NA al final
+# Guía: de B y de C para construir la tabla. Los tiempos de una misma fila pertenecen a
+# Guía: instancias distintas.
+datos_anchos_ind <- data.frame(A, B = c(B, NA), C = c(C, NA))
+# Guía: cat() escribe el encabezado y print() muestra la tabla que se reutilizará en el
+# Guía: script 9.3.
+cat("Datos en formato ancho\n")
+cat("----------------------\n")
+print(datos_anchos_ind)
+```
+
+## Script 9.2: datos del estudio con muestras correlacionadas.
+
+La ingeniera plantea otro diseño para la misma pregunta. Toma 15 instancias al azar de la biblioteca y resuelve cada una con los tres algoritmos. Los tiempos son ficticios y cada fila reúne tres mediciones de la misma instancia.
+
+```{r}
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(tibble)
+library(tidyr)
+# Guía: WebPower se usará para calcular el tamaño de un futuro estudio de medidas repetidas
+# Guía: en el script 9.10.
+library(WebPower)   # carga MASS, que tapa select() de dplyr
+
+# Crear la matriz de datos en formato ancho: una fila por instancia, con los
+# tiempos [ms] que requirió cada algoritmo para resolverla
+# Guía: Instancia identifica el caso. El primer tiempo de A, el primero de B y el primero
+# Guía: de C corresponden todos a la instancia 1. La misma lógica sigue para el resto.
+Instancia <- 1:15
+A <- c(17.7, 16.5, 22.4, 23.6, 26.1, 25.1, 21.6, 20.4, 20.7, 23.5,
+       28.9, 19.6, 16.8, 14.1, 17.5)
+B <- c(19.9, 18.0, 21.9, 25.3, 28.8, 27.4, 24.3, 22.0, 23.9, 27.3,
+       28.2, 19.1, 19.0, 15.0, 18.1)
+C <- c(14.8, 14.5, 21.4, 25.6, 27.8, 30.3, 22.1, 19.6, 21.0, 24.2,
+       28.4, 18.2, 15.5,  8.5, 12.8)
+# Guía: Las tres columnas de tiempos tienen 15 valores y el identificador permite mantener
+# Guía: juntas las mediciones del mismo caso.
+datos_anchos_cor <- data.frame(Instancia, A, B, C)
+cat("Datos en formato ancho\n")
+cat("----------------------\n")
+print(datos_anchos_cor)
+```
+
+## Script 9.3: (continuación del script 9.1) formato largo y gráficos Q-Q del estudio con muestras independientes.
+
+Este bloque usa la tabla ancha del script 9.1. Prepara una fila por tiempo medido y separa los tiempos por algoritmo en gráficos Q-Q para revisar la normalidad dentro de cada grupo independiente.
+
+```{r}
+# Llevar los datos a formato largo, sin las celdas vacías: cada fila es una
+# instancia distinta
+# Guía: pivot_longer() pasa el nombre de cada columna a Algoritmo y su valor a Tiempo.
+# Guía: values_drop_na descarta los dos espacios de relleno.
+datos_largos_ind <- datos_anchos_ind |>
+  pivot_longer(c("A", "B", "C"), names_to = "Algoritmo", values_to = "Tiempo",
+               values_drop_na = TRUE) |>
+# Guía: Se asigna un identificador nuevo a cada observación. Al quedar una fila por
+# Guía: instancia, la tabla tiene 58 filas.
+  mutate(Instancia = factor(1:n()), Algoritmo = factor(Algoritmo))
+
+# Definir el nivel de significación
+# Guía: alfa_ind se reutiliza para juzgar el resultado del ANOVA y para las comparaciones
+# Guía: posteriores.
+alfa_ind <- 0.05
+
+# Evaluar la condición de normalidad con gráficos Q-Q
+# Guía: ggqqplot() compara los cuantiles observados con los que se esperarían bajo
+# Guía: normalidad. facet_wrap() separa los algoritmos en paneles.
+g1_ind <- ggqqplot(datos_largos_ind, x = "Tiempo", color = "Algoritmo",
+                   palette = c("steelblue", "steelblue1", "steelblue4"),
+                   xlab = "Cuantil teórico", ylab = "Cuantil observado")
+g1_ind <- g1_ind + facet_wrap(~ Algoritmo) + rremove("legend")
+print(g1_ind)
+```
+
+## Script 9.4: (continuación del script 9.3) tamaño, media y varianza de cada algoritmo, y sus totales, en el estudio con muestras independientes.
+
+Con los 58 tiempos en formato largo del script 9.3, se resumen el tamaño, la media y la varianza de cada grupo. Las varianzas por algoritmo permiten revisar si las dispersiones son comparables antes del ANOVA.
+
+```{r}
+# Calcular el tamaño, la media y la varianza de cada algoritmo, y las totales
+# Guía: group_by() permite que summarise() calcule n(), mean() y var() por separado para A,
+# Guía: B y C.
+resumen_ind <- datos_largos_ind |> group_by(Algoritmo) |>
+  summarise(n = n(), Media = mean(Tiempo), Varianza = var(Tiempo))
+# Guía: El total usa todos los tiempos juntos. Es un resumen descriptivo de la muestra
+# Guía: completa.
+total_ind <- datos_largos_ind |>
+  summarise(Algoritmo = "Total", n = n(), Media = mean(Tiempo), Varianza = var(Tiempo))
+# Guía: bind_rows() agrega el resumen total debajo de los tres grupos. num() fija cómo se
+# Guía: muestran los decimales. Para la revisión de varianzas se comparan las tres filas
+# Guía: por algoritmo.
+resumen_ind <- bind_rows(resumen_ind, total_ind) |>
+  mutate(across(c(Media, Varianza), ~ num(., digits = 3)))
+cat("Resumen de cada algoritmo\n-------------------------\n")
+print(resumen_ind)
+```
+
+## Script 9.5: (continuación del script 9.2) formato largo, gráficos Q-Q y nivel de significación del estudio con muestras correlacionadas.
+
+Aquí se retoman las 15 instancias del script 9.2. Se prepara una tabla larga que conserva el identificador de cada instancia y se calculan diferencias de tiempo entre algoritmos para revisar su distribución.
+
+```{r}
+# Llevar los datos a formato largo, conservando el identificador de la instancia
+# Guía: Al apilar A, B y C, se conserva Instancia. La misma etiqueta aparece en las tres
+# Guía: mediciones de un caso y permite usarla como bloque en el ANOVA.
+datos_largos_cor <- datos_anchos_cor |>
+  pivot_longer(c("A", "B", "C"), names_to = "Algoritmo", values_to = "Tiempo") |>
+  mutate(Instancia = factor(Instancia), Algoritmo = factor(Algoritmo))
+
+# Evaluar la normalidad de las diferencias entre cada par de algoritmos
+# Guía: Las restas B-A, C-A y B-C se calculan primero en la tabla ancha, donde los tiempos
+# Guía: de una misma instancia están en la misma fila.
+diferencias <- datos_anchos_cor |>
+  mutate("B-A" = B - A, "C-A" = C - A, "B-C" = B - C) |>
+  pivot_longer(c("B-A", "C-A", "B-C"), names_to = "Par", values_to = "Diferencia")
+# Guía: Cada panel examina la distribución de las 15 diferencias de un par. Los puntos de
+# Guía: C-A generan dudas sobre normalidad en el ejemplo.
+g1_cor <- ggqqplot(diferencias, x = "Diferencia", color = "Par",
+                   palette = c("steelblue", "steelblue1", "steelblue4"),
+                   xlab = "Cuantil teórico", ylab = "Cuantil observado")
+g1_cor <- g1_cor + facet_wrap(~ Par) + rremove("legend")
+print(g1_cor)
+
+# Hay dudas sobre la normalidad de C-A: usar un nivel de significación exigente
+# Guía: La lectura fija alfa en 0.01 para exigir más evidencia en este estudio. La elección
+# Guía: del umbral forma parte del criterio de decisión.
+alfa_cor <- 0.01
+```
+
+## Script 9.6: (continuación del script 9.5) tamaño, media y varianza de cada algoritmo, y sus totales, y varianza de cada diferencia, en el estudio con muestras correlacionadas.
+
+Se usan dos objetos del script 9.5. `datos_largos_cor` contiene los tiempos de los tres algoritmos. `diferencias` contiene las restas por instancia. La dispersión de esas restas permite examinar la esfericidad.
+
+```{r}
+# Calcular el tamaño, la media y la varianza de cada algoritmo, y las totales
+# Guía: Cada fila del resumen corresponde a un algoritmo con 15 tiempos. La fila Total
+# Guía: resume las 45 mediciones.
+resumen_cor <- datos_largos_cor |> group_by(Algoritmo) |>
+  summarise(n = n(), Media = mean(Tiempo), Varianza = var(Tiempo))
+total_cor <- datos_largos_cor |>
+  summarise(Algoritmo = "Total", n = n(), Media = mean(Tiempo), Varianza = var(Tiempo))
+resumen_cor <- bind_rows(resumen_cor, total_cor) |>
+  mutate(across(c(Media, Varianza), ~ num(., digits = 3)))
+cat("Resumen de cada algoritmo\n-------------------------\n")
+print(resumen_cor)
+
+# Calcular la varianza de cada diferencia, para evaluar la esfericidad
+# Guía: Se calcula la varianza muestral de cada conjunto de diferencias. Bajo esfericidad
+# Guía: se espera que las varianzas poblacionales de esas diferencias sean iguales.
+varianzas <- diferencias |> group_by(Par) |>
+  summarise(Varianza = num(var(Diferencia), digits = 3))
+cat("\nVarianza de cada diferencia\n---------------------------\n")
+print(varianzas)
+```
+
+## Script 9.7: (continuación del script 9.4) procedimiento ANOVA para el estudio con muestras independientes.
+
+En el diseño independiente, los gráficos Q-Q y las varianzas por grupo apoyan el uso del ANOVA de una vía. El bloque contrasta si los tres algoritmos tienen el mismo tiempo medio y complementa el diagnóstico de varianzas con la prueba de Levene.
+
+```{r}
+# Obtener la tabla ANOVA con aov()
+# Guía: En Tiempo ~ Algoritmo, Tiempo es la respuesta y Algoritmo es el factor. data = _
+# Guía: indica dónde se entrega la tabla que viene del pipe.
+aov_ind <- datos_largos_ind |> aov(Tiempo ~ Algoritmo, data = _)
+cat("Tabla ANOVA\n")
+cat("-----------\n")
+# Guía: La tabla separa la variación entre algoritmos y la residual. El valor p de la fila
+# Guía: Algoritmo corresponde a la prueba global.
+print(summary(aov_ind))
+
+# Obtener el mismo resultado, y la prueba de Levene, con rstatix
+cat("\nProcedimiento ANOVA con anova_test()\n")
+cat("-------------------------------------\n")
+# Guía: detailed = TRUE conserva sumas de cuadrados y grados de libertad. Otros bloques los
+# Guía: usan para calcular el efecto y las barras de Tukey.
+anova_ind <- datos_largos_ind |> anova_test(Tiempo ~ Algoritmo, detailed = TRUE)
+print(anova_ind)
+cat("\nPrueba de Levene\n")
+cat("----------------\n")
+# Guía: Levene contrasta la igualdad de las varianzas de los tres grupos. Su valor p se
+# Guía: interpreta como diagnóstico de ese supuesto.
+print(datos_largos_ind |> levene_test(Tiempo ~ Algoritmo))
+```
+
+## Script 9.8: (continuación del script 9.6) procedimiento ANOVA para el estudio con muestras correlacionadas.
+
+Cada una de las 15 instancias tiene un tiempo con A, B y C. El ANOVA de medidas repetidas tiene en cuenta esa relación y separa la variación entre instancias de la que se usa para comparar algoritmos. La salida también permite revisar la esfericidad y aplicar una corrección a la inferencia.
+
+```{r}
+# Obtener la tabla ANOVA con aov(), separando la variabilidad de las instancias
+# Guía: Error(Instancia / Algoritmo) declara el diseño repetido. summary() muestra un
+# Guía: estrato de variación entre instancias y otro para el efecto de Algoritmo dentro de
+# Guía: ellas.
+aov_cor <- datos_largos_cor |>
+  aov(Tiempo ~ Algoritmo + Error(Instancia / Algoritmo), data = _)
+cat("Tabla ANOVA\n-----------\n")
+print(summary(aov_cor))
+
+# Obtener el mismo resultado, con la esfericidad, con rstatix
+cat("\nProcedimiento ANOVA con anova_test()\n")
+cat("-------------------------------------\n")
+# Guía: dv es la respuesta, wid identifica el caso y within indica la condición que cambia
+# Guía: dentro de cada caso.
+anova_cor <- datos_largos_cor |> anova_test(dv = Tiempo, wid = Instancia,
+                                            within = Algoritmo, detailed = TRUE)
+# Guía: Además de la tabla ANOVA, se imprimen la prueba de Mauchly y las correcciones GG y
+# Guía: HF. En este ejemplo se informa Huynh-Feldt con sus grados de libertad y valor p
+# Guía: corregidos. F conserva su valor.
+print(anova_cor)
+```
+
+## Script 9.9: (continuación del script 9.7) tamaño del efecto y planificación de un estudio con muestras independientes.
+
+Se retoma el resultado del ANOVA independiente del script 9.7 para medir la magnitud de la diferencia entre algoritmos. Luego se estima cuántas instancias por grupo requeriría un nuevo estudio diseñado para detectar un efecto mediano.
+
+```{r}
+# Calcular la f de Cohen observada, con las sumas de cuadrados de anova_test()
+# Guía: SSn es la suma de cuadrados del efecto de Algoritmo y SSd la residual. Su cociente,
+# Guía: bajo raíz cuadrada, da la f de Cohen observada.
+f_ind <- sqrt(anova_ind[["SSn"]] / anova_ind[["SSd"]])
+cat("f de Cohen observada:", round(f_ind, 3), "\n")
+
+# Planificar: instancias por algoritmo para detectar un efecto mediano
+cat("\nTamaño de las muestras para un poder de 0,80\n")
+cat("--------------------------------------------\n")
+# Guía: k = 3 fija el número de grupos y f = 0.25 el efecto que se busca detectar. La n
+# Guía: devuelta corresponde a instancias por algoritmo en un diseño balanceado.
+print(pwr.anova.test(k = 3, f = 0.25, sig.level = alfa_ind, power = 0.80))
+```
+
+## Script 9.10: (continuación del script 9.8) tamaño del efecto y planificación de un estudio con muestras correlacionadas.
+
+Se usa la tabla del ANOVA de medidas repetidas del script 9.8 para calcular el efecto observado. La planificación compara el número de instancias necesarias con ese efecto y con uno menor, manteniendo tres mediciones por instancia.
+
+```{r}
+# Calcular la f de Cohen observada, con la eta cuadrado parcial y las sumas de
+# cuadrados de anova_test()
+# Guía: Se extrae la fila Algoritmo de la tabla ANOVA. eta2_p compara la variación del
+# Guía: efecto con la suma de esa variación y el error correspondiente.
+efecto <- anova_cor[["ANOVA"]] |> filter(Effect == "Algoritmo")
+eta2_p <- efecto[["SSn"]] / (efecto[["SSn"]] + efecto[["SSd"]])
+# Guía: La fórmula convierte la eta cuadrado parcial a f de Cohen para usarla en la
+# Guía: planificación.
+f_cor <- sqrt(eta2_p / (1 - eta2_p))
+cat("f de Cohen observada:", round(f_cor, 3), "\n")
+
+# Planificar otro estudio: instancias para un poder de 0,90, con la esfericidad
+# estimada y el efecto observado aquí, o uno más prudente
+cat("\nInstancias para un poder de 0,90, con el efecto observado\n")
+cat("---------------------------------------------------------\n")
+# Guía: n = NULL pide estimar el número de instancias. ng = 1 y nm = 3 representan un grupo
+# Guía: con tres mediciones por instancia. nscor = 0.77 aproxima la corrección de
+# Guía: esfericidad usada en el ejemplo.
+print(wp.rmanova(n = NULL, ng = 1, nm = 3, f = round(f_cor, 2), nscor = 0.77,
+                 alpha = alfa_cor, power = 0.90, type = 1))
+cat("\nInstancias para un poder de 0,90, con un efecto más prudente\n")
+cat("-----------------------------------------------------------\n")
+# Guía: Se repite el cálculo con f = 0.5. Un efecto menor requiere más instancias si se
+# Guía: mantienen el alfa y el poder.
+print(wp.rmanova(n = NULL, ng = 1, nm = 3, f = 0.5, nscor = 0.77, alpha = alfa_cor,
+                 power = 0.90, type = 1))
+```
+
+## Script 9.11: (continuación del script 9.9) procedimientos post hoc con pruebas t para cada par y con la prueba HSD de Tukey.
+
+El ANOVA del estudio independiente encontró evidencia de diferencias entre los tiempos medios. Este bloque compara A con B, A con C y B con C para identificar dónde están las diferencias. La lectura usa Holm como ajuste principal y compara la decisión con BH y con el HSD de Tukey.
+
+```{r}
+# Comparar los pares con pruebas t, ajustando con Holm y con Benjamini y Hochberg,
+# y con intervalos de confianza corregidos con Bonferroni
+# Guía: choose() cuenta los pares posibles a partir del número de niveles del factor. Con
+# Guía: tres algoritmos hay tres comparaciones.
+m_ind <- choose(nlevels(datos_largos_ind[["Algoritmo"]]), 2)
+# Guía: pool.sd = FALSE hace que cada prueba t use los datos de los dos grupos que compara.
+# Guía: var.equal = TRUE usa varianzas iguales dentro de ese par.
+pares_ind <- datos_largos_ind |>
+  pairwise_t_test(Tiempo ~ Algoritmo, pool.sd = FALSE, var.equal = TRUE,
+                  p.adjust.method = "holm", detailed = TRUE,
+                  conf.level = 1 - alfa_ind / m_ind) |>
+# Guía: p.BH se calcula desde los valores p crudos. p.adj corresponde a Holm. El nivel 1 -
+# Guía: alfa_ind / m_ind se usa para los intervalos de Bonferroni.
+  mutate(p.BH = p.adjust(p, method = "BH")) |>
+  dplyr::select(group1, group2, estimate, statistic, df, conf.low, conf.high,
+                p, p.Holm = p.adj, p.BH) |>
+  mutate(across(c(estimate, statistic, conf.low, conf.high, p, p.Holm, p.BH),
+                ~ num(., digits = 3)))
+cat("Pruebas t por pares\n")
+cat("-------------------\n")
+# Guía: width = Inf muestra todas las columnas. El signo de estimate sigue el orden group1
+# Guía: menos group2. Los intervalos y los valores p pueden dar decisiones distintas porque
+# Guía: usan ajustes diferentes.
+print(pares_ind, width = Inf)
+
+# Aplicar el procedimiento HSD de Tukey
+cat("\nProcedimiento HSD de Tukey\n")
+cat("--------------------------\n")
+# Guía: tukey_hsd() devuelve la diferencia estimada, su intervalo simultáneo y el valor p
+# Guía: ajustado por Tukey para cada par.
+tukey <- datos_largos_ind |>
+  tukey_hsd(Tiempo ~ Algoritmo, conf.level = 1 - alfa_ind) |>
+  dplyr::select(group1, group2, estimate, conf.low, conf.high, p.adj) |>
+  mutate(across(c(estimate, conf.low, conf.high, p.adj), ~ num(., digits = 3)))
+print(tukey)
+```
+
+## Script 9.12: (continuación del script 9.11) gráfico de las medias con barras de Tukey.
+
+Se usan las medias de los tres grupos independientes y el error residual del ANOVA para representar gráficamente la comparación de Tukey. Cada punto es la media de un algoritmo y la barra ayuda a comparar la separación entre medias.
+
+```{r}
+# barras que no se traslapan indican una diferencia significativa según Tukey
+# Guía: ms_wg es el cuadrado medio residual del ANOVA. qtukey() obtiene el valor crítico de
+# Guía: Tukey usando el número de grupos y los grados de libertad residuales.
+ms_wg <- anova_ind[["SSd"]] / anova_ind[["DFd"]]
+q <- qtukey(1 - alfa_ind, nmeans = nlevels(datos_largos_ind[["Algoritmo"]]),
+            df = anova_ind[["DFd"]])
+# Guía: Mitad es la semilongitud de la barra. Se calcula con el tamaño de cada grupo y se
+# Guía: dibuja a ambos lados de su media. Para la decisión exacta por par se puede
+# Guía: consultar la tabla HSD del bloque anterior.
+barras <- datos_largos_ind |> group_by(Algoritmo) |>
+  summarise(Media = mean(Tiempo), Mitad = q / 2 * sqrt(ms_wg / n()))
+# Guía: geom_pointrange() dibuja un punto para la media y un segmento entre Media - Mitad y
+# Guía: Media + Mitad.
+g2_ind <- ggplot(barras, aes(x = Algoritmo, y = Media)) +
+  geom_pointrange(aes(ymin = Media - Mitad, ymax = Media + Mitad),
+                  color = "steelblue") +
+  labs(y = "Tiempo de ejecución [ms]") + theme_pubr()
+print(g2_ind)
+```
+
+## Script 9.13: (continuación del script 9.12) prueba de Scheffé para cuatro contrastes.
+
+La ingeniera puede querer comparar el tiempo medio de un algoritmo con el promedio de otros dos. Scheffé permite evaluar esa pregunta y las comparaciones de pares mediante contrastes que combinan las medias del ANOVA independiente.
+
+```{r}
+# Guía: matrix() llena las columnas en orden. Cada columna contiene los pesos de A, B y C
+# Guía: para un contraste. En las cuatro columnas los coeficientes suman cero.
+contrastes <- matrix(c(1, -1,  0,
+                       0,  1, -1,
+                       1, -0.5, -0.5,
+                       -0.5, 1, -0.5), nrow = 3)
+# Guía: Los dos primeros contrastes comparan A-B y B-C. Los otros comparan A con el
+# Guía: promedio de B y C, y B con el promedio de A y C.
+cat("Prueba de Scheffé\n")
+cat("-----------------\n")
+# Guía: ScheffeTest() usa el modelo aov_ind. which identifica el factor y la salida da
+# Guía: diferencias, intervalos y valores p para cada contraste.
+print(ScheffeTest(aov_ind, which = "Algoritmo", contrasts = contrastes,
+                  conf.level = 1 - alfa_ind))
+```
+
+## Script 9.14: (continuación del script 9.10) procedimiento post hoc con pruebas t pareadas para cada par.
+
+El ANOVA de medidas repetidas encontró evidencia de diferencias entre los algoritmos. Para identificar los pares, se compara cada algoritmo con otro usando las diferencias dentro de las mismas 15 instancias.
+
+```{r}
+# Comparar los pares con pruebas t pareadas, ajustando con Holm y con
+# Benjamini y Hochberg, y con intervalos de confianza corregidos con Bonferroni
+# Guía: Se cuentan los tres pares de algoritmos para calcular el nivel de confianza de
+# Guía: Bonferroni.
+m_cor <- choose(nlevels(datos_largos_cor[["Algoritmo"]]), 2)
+# Guía: paired = TRUE compara cada tiempo con el de la misma instancia en el otro
+# Guía: algoritmo. El orden de los casos dentro de cada grupo permite conservar ese
+# Guía: emparejamiento.
+pares_cor <- datos_largos_cor |>
+  pairwise_t_test(Tiempo ~ Algoritmo, paired = TRUE,
+                  p.adjust.method = "holm", detailed = TRUE,
+                  conf.level = 1 - alfa_cor / m_cor) |>
+# Guía: Se calcula BH sobre p y se conserva Holm como ajuste principal. Cada intervalo usa
+# Guía: el nivel individual 1 - alfa_cor / m_cor.
+  mutate(p.BH = p.adjust(p, method = "BH")) |>
+  dplyr::select(group1, group2, estimate, statistic, df, conf.low, conf.high,
+                p, p.Holm = p.adj, p.BH) |>
+  mutate(across(c(estimate, statistic, conf.low, conf.high, p, p.Holm, p.BH),
+                ~ num(., digits = 3)))
+# Guía: La estimación de cada fila es el promedio de las diferencias pareadas en el orden
+# Guía: group1 menos group2. Al decidir con Holm se compara p.Holm con alfa_cor.
+cat("Pruebas t pareadas por pares\n")
+cat("----------------------------\n")
+print(pares_cor, width = Inf)
+```
+
+## Script 9.15: (continuación del script 9.14) gráfico de las diferencias con sus intervalos de confianza de Bonferroni.
+
+Se recupera `diferencias` del script 9.5 y se usa el número de comparaciones calculado en el 9.14. El gráfico muestra cuánto cambia el tiempo en promedio para cada resta y qué valores son compatibles con su intervalo de Bonferroni.
+
+```{r}
+# Graficar la media de cada diferencia con su intervalo de confianza de Bonferroni
+# Guía: ggerrorplot() calcula la media y el intervalo de confianza para cada columna de
+# Guía: diferencias apilada en Par. Se mantiene el signo de las restas B-A, C-A y B-C.
+g2_cor <- ggerrorplot(diferencias, x = "Par", y = "Diferencia", desc_stat = "mean_ci",
+                      ci = 1 - alfa_cor / m_cor, color = "steelblue",
+                      ylab = "Diferencia de tiempo [ms]")
+# Guía: La línea horizontal marca el cero. Ver si cada barra cruza esa línea ayuda a leer
+# Guía: los intervalos de Bonferroni.
+g2_cor <- g2_cor + geom_hline(yintercept = 0, linetype = "dashed")
+print(g2_cor)
+```
