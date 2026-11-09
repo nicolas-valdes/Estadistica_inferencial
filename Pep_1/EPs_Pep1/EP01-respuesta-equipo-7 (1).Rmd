@@ -1,0 +1,106 @@
+---
+title: "EP01-respuesta-equipo-7"
+subtitle: "Edad de la jefatura de hogar según sexo en la Región Metropolitana"
+output: html_document
+---
+
+## Pregunta
+
+**¿A qué edad se es jefa o jefe de hogar en la Región Metropolitana, y es distinto para hombres y mujeres?**
+
+## Carga de datos
+
+```{r carga-datos, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+casen_rm <- read_csv(
+  "/Users/Matias/Downloads/EP01-Datos-Casen2024-RM.csv",
+  na = c("", "NA"),
+  col_types = cols(
+    folio          = col_character(),
+    provincia      = col_factor(),
+    comuna         = col_factor(),
+    area           = col_factor(),
+    edad           = col_double(),
+    sexo           = col_factor(),
+    ecivil         = col_factor(),
+    nivel_educ     = col_factor(),
+    h_trab_sem     = col_double(),
+    tipo_trab      = col_factor(),
+    ing_aut_hogar  = col_double(),
+    num_pers_hogar = col_double()
+  )
+)
+```
+
+Usaremos las variables edad y sexo. edad es una variable numérica discreta que indica los años de la jefa o jefe de hogar. sexo es una variable categórica nominal con las categorías Hombre y Mujer, que nos permitirá comparar sus edades. No utilizaremos las demás variables porque no son necesarias para responder directamente la pregunta.
+
+## Estadísticos
+
+Calculamos la cantidad de hogares para conocer el tamaño de cada grupo. La media y la mediana resumen la edad central. La desviación estándar y el rango intercuartílico muestran cuánto varían las edades dentro de cada grupo.
+
+```{r estadisticos}
+resumen <- casen_rm |>
+  group_by(sexo) |>
+  summarise(
+    hogares = n(),
+    media = mean(edad, na.rm = TRUE),
+    mediana = median(edad, na.rm = TRUE),
+    desviacion_estandar = sd(edad, na.rm = TRUE),
+    q1 = quantile(edad, 0.25, na.rm = TRUE),
+    q3 = quantile(edad, 0.75, na.rm = TRUE)
+  )
+
+resumen_mostrar <- resumen |>
+  mutate(
+    media = round(media, 1),
+    desviacion_estandar = round(desviacion_estandar, 1)
+  ) |>
+  rename(
+    Sexo = sexo,
+    Hogares = hogares,
+    Media = media,
+    Mediana = mediana,
+    `Desviación estándar` = desviacion_estandar,
+    Q1 = q1,
+    Q3 = q3
+  )
+
+knitr::kable(
+  resumen_mostrar,
+  caption = "Edad de la jefatura de hogar según sexo"
+)
+```
+
+## Gráfico
+
+El diagrama de cajas permite comparar la mediana, la dispersión y los valores extremos de la edad entre hombres y mujeres. El punto blanco representa la media de cada grupo.
+
+```{r grafico, fig.width=7, fig.height=5}
+ggplot(casen_rm, aes(x = sexo, y = edad, fill = sexo)) +
+  stat_boxplot(geom = "errorbar", width = 0.2) +
+  geom_boxplot(width = 0.55, alpha = 0.8, outlier.alpha = 0.35) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 21,
+    size = 3,
+    fill = "gray"
+  ) +
+  scale_fill_manual(values = c("Hombre" = "blue", "Mujer" = "red")) +
+  labs(
+    title = "Edad de la jefatura de hogar según sexo",
+    x = "Sexo",
+    y = "Edad en años"
+  ) 
+```
+
+## Descripción del gráfico
+
+Las cajas de hombres y mujeres se encuentran a alturas muy parecidas y se superponen ampliamente. La mediana es de 53 años en ambos grupos. El 50% central de las edades se encuentra entre 40 y 65 años en los hombres y entre 40 y 66 años en las mujeres. Las mujeres tienen una media levemente mayor, pero la diferencia es pequeña en comparación con la dispersión de las edades.
+
+## Respuesta
+
+En esta muestra, se es jefa o jefe de hogar aproximadamente a los 53 años. No observamos una diferencia importante entre hombres y mujeres: ambos grupos tienen la misma mediana y presentan distribuciones muy similares. La media de las mujeres es solo cerca de medio año mayor que la de los hombres.
+
+Estas conclusiones describen los hogares incluidos en el archivo. Como la base entregada no contiene un ponderador muestral, no podemos generalizarlas automáticamente a todos los hogares de la Región Metropolitana.

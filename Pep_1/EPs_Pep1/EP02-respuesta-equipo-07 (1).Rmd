@@ -1,0 +1,371 @@
+---
+title: "EP02: resultados del equipo 07"
+output: html_document
+date: "2026-10-04"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(ggpubr)
+
+datos_atletas <- read.csv2("EP02-Datos.csv")
+```
+
+```{r q1-grafico-qq}
+# Pregunta 1: ¿el tiempo promedio posterior de Centro-Sur supera 11,70 segundos?
+# Se usan las variables Zona y Posterior.
+# H0: mu = 11.70 segundos. HA: mu > 11.70 segundos.
+# Suponemos independencia entre atletas.
+# El gráfico Q-Q ayuda a revisar compatibilidad con normalidad, pero no la demuestra.
+atletas_centro_sur <- datos_atletas %>%
+  filter(Zona == "Centro-Sur")
+
+normalidad_q1 <- ggqqplot(
+  data = atletas_centro_sur,
+  x = "Posterior",
+  title = "Gráfico Q-Q: tiempos posteriores de Centro-Sur",
+  xlab = "Cuantiles teóricos",
+  ylab = "Cuantiles de la muestra",
+  color = "steelblue",
+  alpha = 0.7
+)
+normalidad_q1
+```
+
+```{r q1-prueba-t}
+# La prueba t de una muestra contrasta H0: mu = 11.70 frente a HA: mu > 11.70.
+# Resultado: promedio = 12.179375 s; t(31) = 3.9763; p = 0.0001951.
+# Como p < alpha = 0.05, se rechaza H0.
+# Conclusión: hay evidencia de que el promedio posterior supera 11.70 segundos.
+valor_nulo_q1 <- 11.7
+alpha <- 0.05
+
+prueba_q1 <- t.test(
+  x = atletas_centro_sur$Posterior,
+  mu = valor_nulo_q1,
+  alternative = "greater",
+  conf.level = 1 - alpha
+)
+prueba_q1
+mean(atletas_centro_sur$Posterior)
+
+# Resultado: p = 0.0001951 < alpha = 0.05; se rechaza H0.
+# Conclusión: hay evidencia de que el promedio posterior supera 11.70 segundos.
+```
+
+```{r funcion-wald-dos-proporciones}
+# Pregunta 2: ¿difiere la proporción que mejoró al menos 0.25 s entre Centro-Norte y Sur?
+# Éxito: Previo - Posterior >= 0.25. H0: p1 - p2 = 0; HA: p1 - p2 != 0.
+# Se consideran independientes las dos muestras. Para la aproximación normal de proporciones,
+# se revisan al menos 10 éxitos y 10 fracasos por grupo.
+wald_2_prop <- function(exitos1, n1,
+                        exitos2, n2,
+                        valor_nulo = 0,
+                        alpha = 0.05,
+                        alternativa = "two.sided") {
+  # Proporciones observadas y diferencia muestral
+  p1 <- exitos1 / n1
+  p2 <- exitos2 / n2
+  diferencia <- p1 - p2
+
+  # Error estándar del intervalo de confianza
+  error_ic <- sqrt(
+    (p1 * (1 - p1)) / n1 +
+      (p2 * (1 - p2)) / n2
+  )
+
+  # Para H0: p1 - p2 = 0 se usa la proporción agrupada
+  if (valor_nulo == 0) {
+    p_agrupada <- (exitos1 + exitos2) / (n1 + n2)
+    error_prueba <- sqrt(
+      p_agrupada * (1 - p_agrupada) * (1 / n1 + 1 / n2)
+    )
+  } else {
+    error_prueba <- error_ic
+  }
+
+  estadistico_z <- (diferencia - valor_nulo) / error_prueba
+
+  # Valor p de acuerdo con la hipótesis alternativa
+  if (alternativa == "two.sided") {
+    p_value <- 2 * pnorm(abs(estadistico_z), lower.tail = FALSE)
+  } else if (alternativa == "greater") {
+    p_value <- pnorm(estadistico_z, lower.tail = FALSE)
+  } else if (alternativa == "less") {
+    p_value <- pnorm(estadistico_z, lower.tail = TRUE)
+  } else {
+    stop("alternativa debe ser 'two.sided', 'greater' o 'less'")
+  }
+
+  # Intervalo bilateral o unilateral correspondiente
+  if (alternativa == "two.sided") {
+    z_critico <- qnorm(1 - alpha / 2)
+    intervalo <- c(
+      diferencia - z_critico * error_ic,
+      diferencia + z_critico * error_ic
+    )
+  } else if (alternativa == "greater") {
+    z_critico <- qnorm(1 - alpha)
+    intervalo <- c(diferencia - z_critico * error_ic, Inf)
+  } else {
+    z_critico <- qnorm(1 - alpha)
+    intervalo <- c(-Inf, diferencia + z_critico * error_ic)
+  }
+
+  list(
+    p1 = p1,
+    p2 = p2,
+    diferencia = diferencia,
+    valor_nulo = valor_nulo,
+    estadistico_z = estadistico_z,
+    p_value = p_value,
+    intervalo_confianza = intervalo
+  )
+}
+```
+
+```{r q2-preparacion}
+# Mejora = Previo - Posterior. Los valores registrados tienen dos decimales;
+# se redondea la diferencia antes de comparar con el umbral de 0.25 s.
+# Resultado: Centro-Norte tiene 22 éxitos y 12 fracasos; Sur, 22 y 13.
+# En ambos grupos se cumple el requisito de al menos 10 éxitos y 10 fracasos.
+centro_norte <- datos_atletas %>%
+  filter(Zona == "Centro-Norte")
+sur <- datos_atletas %>%
+  filter(Zona == "Sur")
+
+# Los datos se registran con dos decimales; redondeamos la diferencia
+# antes de clasificar si alcanza el umbral de 0,25 segundos.
+mejora_centro_norte <- round(centro_norte$Previo - centro_norte$Posterior, 2)
+mejora_sur <- round(sur$Previo - sur$Posterior, 2)
+
+n_centro_norte <- nrow(centro_norte)
+n_sur <- nrow(sur)
+
+exitos_centro_norte <- sum(mejora_centro_norte >= 0.25)
+exitos_sur <- sum(mejora_sur >= 0.25)
+fracasos_centro_norte <- n_centro_norte - exitos_centro_norte
+fracasos_sur <- n_sur - exitos_sur
+
+c(
+  exitos_centro_norte = exitos_centro_norte,
+  fracasos_centro_norte = fracasos_centro_norte,
+  exitos_sur = exitos_sur,
+  fracasos_sur = fracasos_sur
+)
+
+# Resultado: Centro-Norte tiene 22 éxitos y 12 fracasos; Sur, 22 y 13.
+# Se cumple la condición de al menos 10 éxitos y 10 fracasos en cada muestra.
+```
+
+```{r q2-prueba-wald}
+# Prueba bilateral de Wald para H0: p1 - p2 = 0 frente a HA: p1 - p2 != 0.
+# Resultado: p = 0.8730964 > alpha = 0.05; no se rechaza H0.
+# Conclusión: no hay evidencia suficiente para afirmar que las proporciones difieran.
+# El intervalo de confianza incluye cero, compatible con una diferencia nula.
+prueba_q2 <- wald_2_prop(
+  exitos1 = exitos_centro_norte,
+  n1 = n_centro_norte,
+  exitos2 = exitos_sur,
+  n2 = n_sur,
+  valor_nulo = 0,
+  alpha = 0.05,
+  alternativa = "two.sided"
+)
+prueba_q2
+
+# Resultado: p = 0.8730964 > alpha = 0.05; no se rechaza H0.
+# Conclusión: no hay evidencia suficiente para afirmar que las proporciones difieran.
+```
+
+```{r funciones-pareadas-y-normalidad}
+# Pregunta 3: en Centro-Sur, mejora = Previo - Posterior; valores positivos indican menor tiempo.
+# Se contrasta si la mejora media supera 0.36 s: H0: mu_mejora = 0.36; HA: mu_mejora > 0.36.
+# Es una comparación antes-después de los mismos atletas; corresponde una prueba t pareada.
+# La normalidad se revisa sobre las diferencias individuales, no sobre cada medición por separado.
+verificar_normalidad <- function(x, titulo) {
+  qqnorm(
+    x,
+    main = titulo,
+    xlab = "Cuantiles teóricos",
+    ylab = "Cuantiles de la muestra"
+  )
+  qqline(x, col = "red", lwd = 2)
+  shapiro.test(x)
+}
+
+prueba_t_pareada <- function(x, y,
+                             mu = 0,
+                             alternativa = "two.sided",
+                             alpha = 0.05) {
+  t.test(
+    x = x,
+    y = y,
+    paired = TRUE,
+    mu = mu,
+    alternative = alternativa,
+    conf.level = 1 - alpha
+  )
+}
+```
+
+```{r q3-normalidad}
+# Shapiro-Wilk contrasta H0: las diferencias siguen una distribución normal.
+# Resultado: p = 0.914262 > 0.05; no se rechaza H0, pero eso no prueba normalidad.
+# El gráfico Q-Q complementa la revisión visual.
+atletas_centro_sur_q3 <- datos_atletas %>%
+  filter(Zona == "Centro-Sur")
+mejora_centro_sur <- atletas_centro_sur_q3$Previo - atletas_centro_sur_q3$Posterior
+
+shapiro_q3 <- verificar_normalidad(
+  mejora_centro_sur,
+  "Gráfico Q-Q: mejora de Centro-Sur"
+)
+shapiro_q3
+
+# Shapiro-Wilk contrasta H0: la distribución de las diferencias es normal.
+# Resultado: p = 0.914262 > 0.05; no se rechaza H0, pero no se prueba normalidad.
+```
+
+```{r q3-prueba-pareada}
+# Resultado: mejora media = 0.420625 s; t(31) = 2.8439; p = 0.003910565.
+# Como p < 0.05, se rechaza H0.
+# Conclusión: hay evidencia de que la mejora media de Centro-Sur supera 0.36 s.
+prueba_q3 <- prueba_t_pareada(
+  x = atletas_centro_sur_q3$Previo,
+  y = atletas_centro_sur_q3$Posterior,
+  mu = 0.36,
+  alternativa = "greater",
+  alpha = 0.05
+)
+prueba_q3
+mean(mejora_centro_sur)
+
+# Resultado: mejora media = 0.420625; t(31) = 2.8439; p = 0.003910565.
+# Como p < 0.05, se rechaza H0: hay evidencia de una mejora media mayor que 0.36 s.
+```
+
+```{r funcion-prueba-t-independiente}
+# Pregunta 4: se comparan los tiempos previos de Centro-Sur y Sur.
+# delta = promedio de Centro-Sur - promedio de Sur; estimación muestral = 0.449142857 s.
+# Se evalúa 0 < delta < 0.45 mediante dos pruebas unilaterales:
+# Cota inferior: H0: delta = 0; HA: delta > 0.
+# Cota superior: H0: delta = 0.45; HA: delta < 0.45.
+# Para respaldar el intervalo completo se deben rechazar ambas hipótesis nulas al nivel 0.05.
+# Welch es una prueba t para muestras independientes que no supone varianzas iguales.
+prueba_t_independiente <- function(x, y,
+                                  mu = 0,
+                                  alternativa = "two.sided",
+                                  alpha = 0.05) {
+  t.test(
+    x = x,
+    y = y,
+    mu = mu,
+    alternative = alternativa,
+    paired = FALSE,
+    var.equal = FALSE,
+    conf.level = 1 - alpha
+  )
+}
+```
+
+```{r q4-seleccion-y-normalidad}
+# Medias muestrales: Centro-Sur = 12.600000; Sur = 12.150857; delta = 0.449142857 s.
+# Shapiro-Wilk en cada grupo contrasta H0: normalidad frente a HA: no normalidad.
+# Centro-Sur: p = 0.5094; Sur: p = 0.2915. En ambos casos p > 0.05, por lo que no se rechaza H0.
+# Estos resultados no demuestran que las poblaciones sean normales.
+# El gráfico Q-Q complementa la revisión visual de los cuantiles.
+atletas_centro_sur_q4 <- datos_atletas %>%
+  filter(Zona == "Centro-Sur")
+atletas_sur_q4 <- datos_atletas %>%
+  filter(Zona == "Sur")
+
+tiempo_previo_centro_sur <- atletas_centro_sur_q4$Previo
+tiempo_previo_sur <- atletas_sur_q4$Previo
+
+promedio_previo_centro_sur <- mean(tiempo_previo_centro_sur, na.rm = TRUE)
+promedio_previo_sur <- mean(tiempo_previo_sur, na.rm = TRUE)
+diferencia_de_medias <- promedio_previo_centro_sur - promedio_previo_sur
+c(
+  promedio_centro_sur = promedio_previo_centro_sur,
+  promedio_sur = promedio_previo_sur,
+  diferencia = diferencia_de_medias
+)
+
+shapiro_centro_sur_q4 <- verificar_normalidad(
+  tiempo_previo_centro_sur,
+  "Gráfico Q-Q: tiempos previos de Centro-Sur"
+)
+shapiro_sur_q4 <- verificar_normalidad(
+  tiempo_previo_sur,
+  "Gráfico Q-Q: tiempos previos de Sur"
+)
+shapiro_centro_sur_q4
+shapiro_sur_q4
+
+# Para cada grupo, Shapiro-Wilk contrasta H0: normalidad frente a HA: no normalidad.
+# Centro-Sur: p = 0.5094; Sur: p = 0.2915. En ambos casos p > 0.05, así que
+# no se rechaza H0; esto no demuestra que las poblaciones sean normales.
+```
+
+```{r q4-comparacion-varianzas}
+# Prueba F complementaria: H0: las varianzas de Centro-Sur y Sur son iguales;
+# HA: las varianzas son distintas.
+# Resultado: F(31, 34) = 2.6238; p = 0.00693 < 0.05; se rechaza H0.
+# Hay evidencia de varianzas distintas bajo el supuesto de normalidad.
+# La comparación de varianzas es complementaria; Welch no requiere esta prueba preliminar.
+comparacion_varianzas_q4 <- var.test(
+  tiempo_previo_centro_sur,
+  tiempo_previo_sur
+)
+comparacion_varianzas_q4
+
+# H0: las varianzas de Centro-Sur y Sur son iguales; HA: son distintas.
+# Resultado: F(31, 34) = 2.6238; p = 0.00693 < 0.05; se rechaza H0.
+# Hay evidencia de varianzas distintas bajo el supuesto de normalidad.
+# Welch no requiere igualdad de varianzas, por eso se conserva esta prueba.
+```
+
+```{r q4-pruebas-welch}
+# Cota inferior: H0: delta = 0 frente a HA: delta > 0.
+# Resultado: t = 3.372, gl = 50.75, p = 0.0007172 < 0.05; se rechaza H0.
+# Hay evidencia de que delta es mayor que cero.
+# Cota superior: H0: delta = 0.45 frente a HA: delta < 0.45.
+# Resultado: t = -0.006435, gl = 50.75, p = 0.497445 > 0.05; no se rechaza H0.
+# No hay evidencia suficiente de que delta sea menor que 0.45 s.
+# Conclusión: no queda demostrada la afirmación completa 0 < delta < 0.45.
+alpha <- 0.05
+
+# Cota inferior: H0: delta = 0 frente a HA: delta > 0.
+# Se evalúa si la diferencia es positiva.
+prueba_cota_inferior_q4 <- prueba_t_independiente(
+  x = tiempo_previo_centro_sur,
+  y = tiempo_previo_sur,
+  mu = 0,
+  alternativa = "greater",
+  alpha = alpha
+)
+
+# Cota superior: H0: delta = 0.45 frente a HA: delta < 0.45.
+# Se evalúa si la diferencia es menor que 0,45 segundos.
+prueba_cota_superior_q4 <- prueba_t_independiente(
+  x = tiempo_previo_centro_sur,
+  y = tiempo_previo_sur,
+  mu = 0.45,
+  alternativa = "less",
+  alpha = alpha
+)
+
+prueba_cota_inferior_q4
+prueba_cota_superior_q4
+
+# Cota inferior: t = 3.372, gl = 50.75, p = 0.0007172 < 0.05; se rechaza H0.
+# Hay evidencia de que delta es mayor que cero.
+# Cota superior: t = -0.006435, gl = 50.75, p = 0.497445 > 0.05; no se rechaza H0.
+# No hay evidencia suficiente de que delta sea menor que 0.45 s.
+# Conclusión: no queda demostrada la afirmación completa 0 < delta < 0.45.
+```
+
+```{r declaracion-ia}
+# Se utilizó ChatGPT como apoyo para organizar el código.
+```

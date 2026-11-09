@@ -1,0 +1,999 @@
+---
+title: "EP06-avance2-equipo-08"
+output: html_document
+date: "2026-11-04"
+---
+
+## Datos y librerias
+
+```{r, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+library(car)
+library(ggpubr)
+library(rstatix)
+library(tibble)
+
+# Dejamos el sorteo igual para versiones modernas de R
+RNGkind(sample.kind = "Rejection")
+
+# Se lee con read.csv porque el archivo usa comas para separar columnas
+datos_xd <- read.csv("EP06_Datos.csv")
+
+# Resumen que vamos a ocupar en las seis preguntas
+resumen <- function(datos) {
+  datos |>
+    group_by(version) |>
+    summarise(
+      n = n(),
+      media = mean(valor),
+      mediana = median(valor),
+      desviacion = sd(valor),
+      .groups = "drop"
+    )
+}
+
+# Shapiro nos ayuda a revisar normalidad por grupo
+normalidad <- function(datos) {
+  datos |>
+    group_by(version) |>
+    summarise(
+      W = unname(shapiro.test(valor)$statistic),
+      p.valor = shapiro.test(valor)$p.value,
+      .groups = "drop"
+    )
+}
+```
+
+Trabajamos con alfa = 0,05 para las seis preguntas
+
+En todas las preguntas la variable respuesta es numerica, las observaciones se sortearon de las instancias disponibles y el analisis se limita a esas instancias
+
+Si Shapiro entrega p menor a 0,05 tenemos evidencia contra normalidad, si p es mayor no significa que la normalidad quede demostrada
+
+## Pregunta 1
+
+"Considerando las instancias con 60 o más nodos, ¿hay diferencias entre las mejores soluciones que encuentran las versiones A y B del algoritmo cuando resuelven las mismas instancias? Con la semilla 680, saquen 20 instancias y usen sus resultados con las dos versiones. Si sacaron bien la muestra, deberían obtener: n = 20; A, media 97,952; B, media 94,766 [% del óptimo]."
+
+
+
+Con semilla 680 se sacan 20 instancias y se usan las dos versiones para cada una
+
+Prueba A Ocupar:
+
+t de Student para muestras pareadas, porque las dos versiones se prueban con las mismas instancias
+
+Hipotesis de la prueba parametrica:
+
+H0 = La media de las diferencias A menos B es igual a cero
+
+HA = La media de las diferencias A menos B es distinta de cero
+
+Condiciones:
+
+1. Escala = La calidad esta medida como porcentaje del optimo
+2. Independencia = Cada instancia seleccionada es distinta de las demas, aunq las dos mediciones dentro de cada instancia estan pareadas
+3. Normalidad = Lo importante es revisar la normalidad de las difernecias entre A y B, no la normalidad de cada version por separado
+
+```{r}
+# Pregunta 1: considerando instancias con 60 o mas nodos, hay diferencias entre las mejores soluciones de A y B al resolver las mismas instancias
+# Con semilla 680 sacamos 20 instancias para las dos versiones
+# Control: n = 20, A media 97,952 y B media 94,766 en porcentaje del optimo
+# Filtramos antes de fijar la semilla y de hacer sample
+base_1 <- datos_xd |>
+  filter(n.nodos >= 60)
+
+set.seed(680)
+filas_1 <- sample(seq_len(nrow(base_1)), size = 20)
+
+muestra_1 <- base_1 |>
+  slice(filas_1)
+
+# Pasamos a formato largo para comparar las dos versiones
+largo_1 <- muestra_1 |>
+  select(instancia, mejor.A, mejor.B) |>
+  pivot_longer(
+    cols = starts_with("mejor."),
+    names_to = "version",
+    values_to = "valor"
+  ) |>
+  mutate(version = sub("mejor.", "", version, fixed = TRUE))
+
+resumen(largo_1) |>
+  knitr::kable(digits = 3)
+```
+
+Si la muesra esta bien, las medias quedan cerca de 97,952 para A y 94,766 para B
+
+```{r}
+# Vemos las dos mediciones de cada instancia y sus distribuciones
+largo_1 |>
+  ggplot(aes(x = version, y = valor, group = instancia)) +
+  geom_line(alpha = 0.35) +
+  geom_point() +
+  labs(title = "Calidad de A y B en las mismas instancias", x = "Version", y = "% del optimo")
+
+largo_1 |>
+  ggplot(aes(x = version, y = valor)) +
+  geom_boxplot() +
+  labs(title = "Distribucion de calidad", x = "Version", y = "% del optimo")
+```
+
+```{r}
+# Restamos por instancia, asi se revisa lo que pide la prueba pareada
+dif_1 <- muestra_1 |>
+  transmute(diferencia = mejor.A - mejor.B)
+
+shapiro.test(dif_1$diferencia)
+
+dif_1 |>
+  ggplot(aes(x = diferencia)) +
+  geom_histogram(bins = 8, color = "white") +
+  labs(title = "Diferencias entre A y B", x = "A menos B", y = "Frecuencia")
+
+dif_1 |>
+  ggplot(aes(sample = diferencia)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(title = "QQ plot de las diferencias")
+```
+
+La normalidad de las diferencias no se cumple bien, ya que el p de Shapiro es menor a 0,05 y el grafico muestra asimetria
+
+Prueba basada en rangos:
+
+Wilcoxon de rangos con signo para datos pareados
+
+H0 = La distribucion de las diferencias pareadas esta centrada de forma simetrica en cero
+
+HA = Hay un desplazamiento distinto de cero en las diferencias pareadas
+
+La prueba no necesita normalidad, pero para hablar directamente de la mediana de las diferencias necesitamos que estas sean razonablemente simetricas
+
+
+
+```{r}
+# Aplicamos Wilcoxon pareado, sin ocupar la prueba t
+prueba_1 <- wilcox.test(
+  muestra_1$mejor.A,
+  muestra_1$mejor.B,
+  paired = TRUE,
+  exact = FALSE,
+  correct = FALSE
+)
+
+prueba_1
+```
+
+Respuesta:
+
+Como el p de Wilcoxon es `r signif(prueba_1$p.value, 3)` y es menor a 0,05, rechazamos H0 y encontramos evidencia de diferencias entre A y B al resolver las mismas instancias
+
+En la muesra A consigue porcentajes mas altos del optimo, aunque la asimetria de las diferencias nos obliga a ser cuidadosos al interpretar el resultado como diferencia de medianas
+
+## Pregunta 2
+
+"Considerando las instancias con 60 o más nodos, ¿hay diferencias entre las mejores soluciones que encuentran las versiones A, B y C del algoritmo cuando resuelven las mismas instancias? Con la semilla 558, saquen 21 instancias y usen sus resultados con las tres versiones. Si sacaron bien la muestra, deberían obtener: n = 21; A, media 97,494; B, media 95,437; C, media 96,178 [% del óptimo]."
+
+
+
+Con semilla 558 se sacan 21 instancias y se ocupan los resultados de las tres versiones
+
+Prueba A Ocupar:
+
+ANOVA de medidas repetidas, ya que cada instancia se utiliza para evaluar A, B y C
+
+Con prodecimiento post hoc de comparaciones multiples cuando haga falta
+
+Hipotesis de la prueba parametrica:
+
+H0 = Las medias de calidad son iguales en A, B y C
+
+HA = Al menos una de las medias es distinta
+
+Condiciones:
+
+1. Escala = Los porcentajes son variables numericas
+2. Independencia = Las instancias son distintas entre si, pero dentro de cada instancia hay tres mediciones relacionadas
+3. Normalidad = Revisamos las diferencias por pares y sus QQ plots
+4. Esfericidad = Para el ANOVA se necesita que las varianzas de las diferencias entre pares sean similares, revisamos esto de forma preliminar sin aplicar ANOVA
+
+```{r}
+# Pregunta 2: considerando instancias con 60 o mas nodos, hay diferencias entre las mejores soluciones de A, B y C en las mismas instancias
+# Con semilla 558 sacamos 21 instancias para las tres versiones
+# Control: n = 21, A media 97,494, B media 95,437 y C media 96,178 en porcentaje del optimo
+# Sorteamos una sola vez para mantener el pareo
+base_2 <- datos_xd |>
+  filter(n.nodos >= 60)
+
+set.seed(558)
+filas_2 <- sample(seq_len(nrow(base_2)), size = 21)
+
+muestra_2 <- base_2 |>
+  slice(filas_2)
+
+largo_2 <- muestra_2 |>
+  select(instancia, mejor.A, mejor.B, mejor.C) |>
+  pivot_longer(
+    cols = starts_with("mejor."),
+    names_to = "version",
+    values_to = "valor"
+  ) |>
+  mutate(version = sub("mejor.", "", version, fixed = TRUE))
+
+resumen(largo_2) |>
+  knitr::kable(digits = 3)
+```
+
+Las medias que deberiamos obtener son A = 97,494, B = 95,437 y C = 96,178
+
+```{r}
+# Grafico pareado y cajas para ver donde se concentran los valors
+largo_2 |>
+  ggplot(aes(x = version, y = valor, group = instancia)) +
+  geom_line(alpha = 0.3) +
+  geom_point() +
+  labs(title = "Calidad de A, B y C por instancia", x = "Version", y = "% del optimo")
+
+largo_2 |>
+  ggplot(aes(x = version, y = valor)) +
+  geom_boxplot() +
+  labs(title = "Calidad segun version", x = "Version", y = "% del optimo")
+```
+
+```{r}
+# Comparamos las diferencias pareadas y sus varianzas
+# Esto ayuda a revisar normalidad y esfericidad sin correr ANOVA
+diferencias_2 <- tibble(
+  `A-B` = muestra_2$mejor.A - muestra_2$mejor.B,
+  `A-C` = muestra_2$mejor.A - muestra_2$mejor.C,
+  `B-C` = muestra_2$mejor.B - muestra_2$mejor.C
+) |>
+  pivot_longer(everything(), names_to = "comparacion", values_to = "diferencia")
+
+diferencias_2 |>
+  group_by(comparacion) |>
+  summarise(
+    varianza = var(diferencia),
+    W = unname(shapiro.test(diferencia)$statistic),
+    p.valor = shapiro.test(diferencia)$p.value,
+    .groups = "drop"
+  ) |>
+  knitr::kable(digits = 5)
+```
+
+```{r}
+# QQ plots de las diferencias, no de las medias
+# Con esto tambien podemos observar si hay valores extremos
+diferencias_2 |>
+  ggplot(aes(sample = diferencia)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ comparacion, scales = "free") +
+  labs(title = "Normalidad de las diferencias por pares")
+```
+
+No todas las diferencias parecen normales, en especial las comparaciones que incluyen C, por lo que no conviene confiar de inmediato en el ANOVA
+
+Las varianzas de las diferencias tampoco quedan exactamente iguales, pero esta comparacion es solo preliminar y no reemplaza un test formal de esfericidad
+
+Prueba basada en rangos:
+
+Friedman, porque son tres verisones evaluadas sobre las mismas instancias
+
+H0 = Las tres versiones tienen la misma distribucion de rangos dentro de las instancias, sin que una tienda a quedar sistematicamente mas alta
+
+HA = Al menos una version presenta rangos sistematicamente distintos
+
+Post hoc = Wilcoxon pareado por cada par, ajustando los p con Holm
+
+En cada comparacion post hoc H0 indica que las diferencias pareadas estan centradas de forma simetrica en cero y HA que no lo estan
+
+
+
+```{r}
+# Friedman es el procedimiento omnibus para las tres muestras relacionadas
+prueba_2 <- friedman.test(
+  as.matrix(muestra_2 |> select(mejor.A, mejor.B, mejor.C))
+)
+
+prueba_2
+```
+
+```{r}
+# Hacemos tres Wilcoxon pareados y corregimos por comparaciones multiples
+pares_2 <- list(c("A", "B"), c("A", "C"), c("B", "C"))
+
+post_2 <- lapply(pares_2, function(par) {
+  x <- muestra_2[[paste0("mejor.", par[1])]]
+  y <- muestra_2[[paste0("mejor.", par[2])]]
+  tibble(
+    comparacion = paste(par, collapse = " vs "),
+    p.valor = wilcox.test(x, y, paired = TRUE, exact = FALSE, correct = FALSE)$p.value
+  )
+}) |>
+  bind_rows() |>
+  mutate(p.ajustado = p.adjust(p.valor, method = "holm"))
+
+post_2 |>
+  knitr::kable(digits = 5)
+```
+
+Respuesta:
+
+Friedman tiene p = `r signif(prueba_2$p.value, 3)`, menor a 0,05, asi que se rechaza H0 y hay evidencia de diferencias entre las tres versiones
+
+Con Holm resultan significativas las comparaciones A con B y A con C, pero no B con C
+
+En esta muesra A presenta mejor calidad que las otras dos, mientras entre B y C no encontramos evidencia suficiente de una diferencia
+
+## Pregunta 3
+
+"Considerando las instancias con 70 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones B y C del algoritmo? Con la semilla 287, saquen 24 instancias para la versión B y 23 instancias para la versión C, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: B, n = 24 y media 1.989.544; C, n = 23 y media 1.156.347 [ms]."
+
+
+Con semilla 287 se sacan 24 instancias para B y otras 23 distintas para C
+
+Prueba A Ocupar:
+
+t de Student para muestras independientes, preferiblemente la variante de Welch si las varianzas son distintas
+
+Hipotesis de la prueba parametrica:
+
+H0 = Los tiempos medios de B y C son iguales
+
+HA = Los tiempos medios de B y C son distintos
+
+Condiciones:
+
+1. Escala = El tiempo es numerico continuo y se mide en ms
+2. Independencia = Una instancia aparece solo en una de las dos muestras
+3. Normalidad = Se revisa en cada grupo con Shapiro y QQ plots
+4. Varianzas = Se comparan con Fligner, la t clasica necesita varianzas similares pero Welch no
+
+```{r}
+# Pregunta 3: considerando instancias con 70 o mas nodos, hay diferencias entre los tiempos de ejecucion de B y C
+# Con semilla 287 sacamos 24 instancias para B y 23 para C, todas distintas
+# Control: B media 1989544 y C media 1156347 ms
+# Las primeras 24 filas sorteadas van para B y las otras 23 para C
+base_3 <- datos_xd |>
+  filter(n.nodos >= 70)
+
+set.seed(287)
+filas_3 <- sample(seq_len(nrow(base_3)), size = 47)
+
+muestra_3 <- bind_rows(
+  base_3 |> slice(filas_3[1:24]) |>
+    transmute(instancia, version = "B", valor = tiempo.B),
+  base_3 |> slice(filas_3[25:47]) |>
+    transmute(instancia, version = "C", valor = tiempo.C)
+)
+
+# Confirmamos que ninguna instancia quedo repetida
+stopifnot(n_distinct(muestra_3$instancia) == 47)
+
+resumen(muestra_3) |>
+  knitr::kable(digits = 1)
+```
+
+Las medias de control son B = 1.989.544 y C = 1.156.347 ms
+
+```{r}
+# Cajas con puntos para ver dispersion y tiempos extremos
+muestra_3 |>
+  ggplot(aes(x = version, y = valor)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.08, alpha = 0.5) +
+  labs(title = "Tiempos de ejecucion B y C", x = "Version", y = "Tiempo en ms")
+
+# QQ plot separado por version
+muestra_3 |>
+  ggplot(aes(sample = valor)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ version, scales = "free") +
+  labs(title = "Normalidad de los tiempos")
+```
+
+```{r}
+# Shapiro revisa normalidad y Fligner revisa dispersion
+normalidad(muestra_3) |>
+  knitr::kable(digits = 5)
+
+fligner.test(valor ~ version, data = muestra_3)
+```
+
+B tiene p menor a 0,05 en Shapiro y Fligner tambien muestra evidencia de varianzas distintas
+
+Por esto una t clasica no parece confiable con los datos originales, aunque Welch corriga el tema de las varianzas no arregla por si solo la asimetria
+
+Prueba basada en rangos:
+
+Wilcoxon de suma de rangos, tambien conocido como Mann Whitney, para dos grupos independietes
+
+H0 = B y C tienen la misma distribucion de tiempos
+
+HA = Las distribuciones de los tiempos de B y C son distintas
+
+Si las formas fueran parecidas se podria hablar de diferencias de ubicacion, pero con distinta dispersion debemos ser mas cuidadosos
+
+
+
+```{r}
+# Wilcoxon para muestras independientes
+prueba_3 <- wilcox.test(
+  valor ~ version,
+  data = muestra_3,
+  exact = FALSE,
+  correct = FALSE
+)
+
+prueba_3
+```
+
+Respuesta:
+
+El p = `r signif(prueba_3$p.value, 3)` es menor a 0,05, entonces se rechaza H0 y los tiempos de B y C muestran diferencias estadisticamente significativas
+
+B tiene tiempos mas altos en la muesra, aunque por las distntas dispersiones no interpretamos esto simplemente como una prueba de medianas iguales
+
+## Pregunta 4
+
+"Considerando las instancias con 50 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones A y B del algoritmo? Con la semilla 558, saquen 16 instancias para la versión A y 17 instancias para la versión B, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: A, n = 16 y media 1.114.799; B, n = 17 y media 1.727.082 [ms]."
+
+Con semilla 558 se sacan 16 instancias para A y 17 para B, todas distintas
+
+Prueba A Ocupar:
+
+t de Student para muestras independientes, o Welch cuando no podemos asumir varianzas iguales
+
+Hipotesis de la prueba parametrica:
+
+H0 = Las medias de tiempo de A y B son iguales
+
+HA = Las medias de tiempo de A y B son distintas
+
+Condiciones:
+
+1. Escala = El tiempo esta medido en ms
+2. Independencia = Son instancias distintas en ambas muestras
+3. Normalidad = Revisamos Shapiro y QQ plot en los dos grupos
+4. Varianzas = Revisamos Fligner sin aplicar la t
+
+```{r}
+# Pregunta 4: considerando instancias con 50 o mas nodos, hay diferencias entre los tiempos de ejecucion de A y B
+# Con semilla 558 sacamos 16 instancias para A y 17 para B, todas distintas
+# Control: A media 1114799 y B media 1727082 ms
+# Se sortean 33 instancias, 16 para A y 17 para B
+base_4 <- datos_xd |>
+  filter(n.nodos >= 50)
+
+set.seed(558)
+filas_4 <- sample(seq_len(nrow(base_4)), size = 33)
+
+muestra_4 <- bind_rows(
+  base_4 |> slice(filas_4[1:16]) |>
+    transmute(instancia, version = "A", valor = tiempo.A),
+  base_4 |> slice(filas_4[17:33]) |>
+    transmute(instancia, version = "B", valor = tiempo.B)
+)
+
+# Confirmamos que ninguna instancia quedo repetida
+stopifnot(n_distinct(muestra_4$instancia) == 33)
+
+resumen(muestra_4) |>
+  knitr::kable(digits = 1)
+```
+
+Las medias de control son A = 1.114.799 y B = 1.727.082 ms
+
+```{r}
+# Miramos el boxplot y luego los cuantiles teoricos normales
+muestra_4 |>
+  ggplot(aes(x = version, y = valor)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.08, alpha = 0.5) +
+  labs(title = "Tiempos de A y B", x = "Version", y = "Tiempo en ms")
+
+muestra_4 |>
+  ggplot(aes(sample = valor)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ version, scales = "free") +
+  labs(title = "QQ plot por version")
+```
+
+```{r}
+# Revisamos normalidad y dispersion de las muestras
+normalidad(muestra_4) |>
+  knitr::kable(digits = 5)
+
+fligner.test(valor ~ version, data = muestra_4)
+```
+
+A no supera el chequeo de normalidad con Shapiro, por lo que usar la t en los datos originales es discutible
+
+Prueba basada en rangos:
+
+Wilcoxon de suma de rangos para muestras independientes
+
+H0 = A y B tienen la misma distribucion de tiempos
+
+HA = Las distribuciones de los tiempos son diferentes
+
+
+
+```{r}
+# Wilcoxon para comparar dos grupos sin parear
+prueba_4 <- wilcox.test(
+  valor ~ version,
+  data = muestra_4,
+  exact = FALSE,
+  correct = FALSE
+)
+
+prueba_4
+```
+
+Respuesta:
+
+El p de Wilcoxon es `r signif(prueba_4$p.value, 3)`, mayor a 0,05, por lo que no rechazamos H0
+
+Aunque la media de B es mayor a la de A, con esta muesra no tenemos evidencia estadistica suficiente para decir que las distribuciones son distintas
+
+## Pregunta 5
+
+"Considerando las instancias con 50 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones A, B y C del algoritmo? Con la semilla 558, saquen 13 instancias para la versión A, 12 instancias para la versión B y 15 instancias para la versión C, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: A, n = 13 y media 1.141.327; B, n = 12 y media 1.704.087; C, n = 15 y media 936.432,1 [ms]."
+
+Con semilla 558 se sacan 13 instancias para A, 12 para B y 15 para C, todas distintas
+
+Prueba A Ocupar:
+
+ANOVA de un factor para muestras independientes, porque comapramos tres versiones con distintas instancias
+
+Con post hoc de comparaciones multiples solo si el omnibus encuentra diferencias
+
+Hipotesis de la prueba parametrica:
+
+H0 = Las tres medias de tiempo son iguales
+
+HA = Al menos una media de tiempo es distinta
+
+Condiciones:
+
+1. Escala = Los tiempos son numericos y se miden en ms
+2. Independencia = Las tres muestras usan instancias diferentes
+3. Normalidad = Se revisa en cada version con Shapiro y QQ plots
+4. Homogeneidad = Las varianzas deberian ser parecidas, revisamos Fligner
+
+```{r}
+# Pregunta 5: considerando instancias con 50 o mas nodos, hay diferencias entre los tiempos de ejecucion de A, B y C
+# Con semilla 558 sacamos 13 instancias para A, 12 para B y 15 para C, todas distintas
+# Control: A media 1141327, B media 1704087 y C media 936432,1 ms
+# Se sortean 40 filas distintas y se reparten en orden
+base_5 <- datos_xd |>
+  filter(n.nodos >= 50)
+
+set.seed(558)
+filas_5 <- sample(seq_len(nrow(base_5)), size = 40)
+
+muestra_5 <- bind_rows(
+  base_5 |> slice(filas_5[1:13]) |>
+    transmute(instancia, version = "A", valor = tiempo.A),
+  base_5 |> slice(filas_5[14:25]) |>
+    transmute(instancia, version = "B", valor = tiempo.B),
+  base_5 |> slice(filas_5[26:40]) |>
+    transmute(instancia, version = "C", valor = tiempo.C)
+)
+
+# Confirmamos que ninguna instancia quedo repetida
+stopifnot(n_distinct(muestra_5$instancia) == 40)
+
+resumen(muestra_5) |>
+  knitr::kable(digits = 1)
+```
+
+Las medias esperadas son A = 1.141.327, B = 1.704.087 y C = 936.432,1 ms
+
+```{r}
+# Boxplot y QQ para revisar las distribuciones
+muestra_5 |>
+  ggplot(aes(x = version, y = valor)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.08, alpha = 0.5) +
+  labs(title = "Tiempos de A, B y C", x = "Version", y = "Tiempo en ms")
+
+muestra_5 |>
+  ggplot(aes(sample = valor)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ version, scales = "free") +
+  labs(title = "QQ plot de tiempos")
+```
+
+```{r}
+# Shapiro y Fligner para estudiar las condiciones del ANOVA
+normalidad(muestra_5) |>
+  knitr::kable(digits = 5)
+
+fligner.test(valor ~ version, data = muestra_5)
+```
+
+En A Shapiro entrega p menor a 0,05, entonces la condicion de normalidad no esta bien respaldada
+
+Prueba basada en rangos:
+
+Kruskal Wallis, porque son tres grupos indepedientes
+
+H0 = A, B y C tienen la misma distribucion de tiempos
+
+HA = Al menos una distribucion es distinta
+
+En un post hoc de Wilcoxon por pares, H0 seria igualdad de distribuciones para el par y HA seria que son diferentes, con ajuste Holm
+
+
+```{r}
+# Kruskal Wallis para los tres grupos independientes
+prueba_5 <- kruskal.test(valor ~ version, data = muestra_5)
+
+prueba_5
+```
+
+Respuesta:
+
+El p del omnibus es `r signif(prueba_5$p.value, 3)`, mayor a 0,05, por lo que no rechazamos H0 y no corresponde hacer post hoc como conclusion confirmatoria
+
+Aunque en la tabla hay medias distintas, no encontramos evidencia estadistica suficiente para decir que alguna distribucion de tiempos difiera de las otras
+
+## Pregunta 6
+
+"Considerando las instancias con 60 o más nodos, ¿hay diferencias entre los tiempos de ejecución de las versiones A, B y C del algoritmo? Con la semilla 455, saquen 16 instancias para la versión A, 13 instancias para la versión B y 15 instancias para la versión C, todas distintas (muestras independientes). Si sacaron bien la muestra, deberían obtener: A, n = 16 y media 1.110.978; B, n = 13 y media 1.940.876; C, n = 15 y media 1.096.393 [ms]."
+
+Con semilla 455 se sacan 16 instancias para A, 13 para B y 15 para C, todas diferentes
+
+Prueba A Ocupar:
+
+ANOVA de un factor para muestras independientes, ya que no repetimos instancias entre versiones
+
+Con post hoc de comparaciones multiples si el omnibus sale significativo
+
+Hipotesis de la prueba parametrica:
+
+H0 = Los tiempos medios de A, B y C son iguales
+
+HA = Al menos una de las medias es distinta
+
+Condiciones:
+
+1. Escala = El tiempo de ejecucion esta expresado en ms
+2. Independencia = No se repiten instancias entre las tres muestras
+3. Normalidad = Revisamos las distribuciones de cada version
+4. Homogeneidad = Revisamos las varianzas con Fligner
+
+```{r}
+# Pregunta 6: considerando instancias con 60 o mas nodos, hay diferencias entre los tiempos de ejecucion de A, B y C
+# Con semilla 455 sacamos 16 instancias para A, 13 para B y 15 para C, todas distintas
+# Control: A media 1110978, B media 1940876 y C media 1096393 ms
+# Se sortean 44 instancias y luego se reparten por version
+base_6 <- datos_xd |>
+  filter(n.nodos >= 60)
+
+set.seed(455)
+filas_6 <- sample(seq_len(nrow(base_6)), size = 44)
+
+muestra_6 <- bind_rows(
+  base_6 |> slice(filas_6[1:16]) |>
+    transmute(instancia, version = "A", valor = tiempo.A),
+  base_6 |> slice(filas_6[17:29]) |>
+    transmute(instancia, version = "B", valor = tiempo.B),
+  base_6 |> slice(filas_6[30:44]) |>
+    transmute(instancia, version = "C", valor = tiempo.C)
+)
+
+# Confirmamos que ninguna instancia quedo repetida
+stopifnot(n_distinct(muestra_6$instancia) == 44)
+
+resumen(muestra_6) |>
+  knitr::kable(digits = 1)
+```
+
+Las medias esperadas son A = 1.110.978, B = 1.940.876 y C = 1.096.393 ms
+
+```{r}
+# Distribucion y QQ de los tiempos, separados por version
+muestra_6 |>
+  ggplot(aes(x = version, y = valor)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.08, alpha = 0.5) +
+  labs(title = "Tiempos de A, B y C", x = "Version", y = "Tiempo en ms")
+
+muestra_6 |>
+  ggplot(aes(sample = valor)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ version, scales = "free") +
+  labs(title = "Normalidad de tiempos por version")
+```
+
+```{r}
+# Miramos la normalidad y dispersion sin correr ANOVA
+normalidad(muestra_6) |>
+  knitr::kable(digits = 5)
+
+fligner.test(valor ~ version, data = muestra_6)
+```
+
+En A la normalidad falla segun Shapiro y tambien hay tiempos extremos, por lo que ANOVA podria ser poco confiable con estos datos
+
+Prueba basada en rangos:
+
+Kruskal Wallis para las tres muestras independientes
+
+H0 = A, B y C tienen la misma distribucion de tiempos
+
+HA = Al menos una version tiene una distribucion distinta
+
+Post hoc = Wilcoxon de suma de rangos para cada par, ajustando los p con Holm
+
+En cada par H0 es igualdad de distribuciones y HA es que no son iguales
+
+
+```{r}
+# Kruskal Wallis como prueba omnibus
+prueba_6 <- kruskal.test(valor ~ version, data = muestra_6)
+
+prueba_6
+```
+
+```{r}
+# Luego comparamos A-B, A-C y B-C con ajuste Holm
+pares_6 <- list(c("A", "B"), c("A", "C"), c("B", "C"))
+
+post_6 <- lapply(pares_6, function(par) {
+  x <- muestra_6 |>
+    filter(version == par[1]) |>
+    pull(valor)
+  y <- muestra_6 |>
+    filter(version == par[2]) |>
+    pull(valor)
+
+  tibble(
+    comparacion = paste(par, collapse = " vs "),
+    p.valor = wilcox.test(x, y, exact = FALSE, correct = FALSE)$p.value
+  )
+}) |>
+  bind_rows() |>
+  mutate(p.ajustado = p.adjust(p.valor, method = "holm"))
+
+post_6 |>
+  knitr::kable(digits = 5)
+```
+
+Respuesta:
+
+El p de Kruskal Wallis es `r signif(prueba_6$p.value, 3)`, menor a 0,05, por lo que rechazamos H0 y encontramos evidencia de diferencias entre las versiones
+
+En el post hoc corregido por Holm, B difiere de A y de C, pero A y C no muestran una diferencia significativa
+
+B tiende a tardar mas segun los tiempos de la muesra, mientras que A y C no se diferencian significativamente con este analisis
+
+# Avance 2
+
+## Version de R
+
+```{r}
+# Version de R usada al ejecutar el analisis
+R.version.string
+```
+
+
+## Pregunta 2 (Método no paramétrico: Prueba de Friedman)
+
+Viendo que se evalúan 3 versiones de algoritmo (k = 3) enlas mismas 21 instancias (muestras correlacionadas) y la normalidad de las diferencias por pares no se cumple satisfactoriamente, se aplica la prueba de Friedman junto con el tamaño del efecto W de Kendall y un procedimiento post hoc mediante pruebas de rangos con signo de Wilcoxon pareadas con ajuste de Holm y análisis de sensibilidad con Benjamini-Hochberg.
+
+Hipótesis:  
+
+H0: dentro de cada instancia, las tres versiones (A, B y C) son intercambiables; ninguna tiende a entregar porcentajes del óptimo mayores que otra.  
+
+HA: dentro de las mismas instancias, al menos una versión tiende a entregar porcentajes del óptimo mayores o menores que alguna otra.
+
+```{r}
+# Preparar los datos en formato largo asegurando factores y orden por instancia
+datos_fri_2 <- muestra_2 |>
+  dplyr::select(instancia, mejor.A, mejor.B, mejor.C) |>
+  pivot_longer(
+    cols = starts_with("mejor."),
+    names_to = "Version",
+    values_to = "Calidad"
+  ) |>
+  mutate(
+    Instancia = factor(instancia),
+    Version = factor(sub("mejor.", "", Version, fixed = TRUE), levels = c("A", "B", "C"))
+  ) |>
+  arrange(Version, Instancia)
+
+alfa_2 <- 0.05
+
+# Aplicar la prueba de Friedman y calcular el tamaño del efecto (W de Kendall)
+prueba_fri_2 <- datos_fri_2 |>
+  friedman_test(Calidad ~ Version | Instancia) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+
+cat("Prueba de Friedman\n")
+print(prueba_fri_2)
+
+efecto_fri_2 <- datos_fri_2 |>
+  friedman_effsize(Calidad ~ Version | Instancia) |> mutate(effsize = num(effsize, digits = 3))
+
+cat("\nTamaño del efecto\n")
+print(efecto_fri_2)
+
+# Procedimiento post hoc: pruebas de rangos con signo de Wilcoxon por pares
+# ajustando con Holm y con Benjamini y Hochberg (Script 10.21)
+pares_fri_2 <- datos_fri_2 |>
+  pairwise_wilcox_test(Calidad ~ Version, paired = TRUE, p.adjust.method = "holm") |>
+  mutate(p.BH = p.adjust(p, method = "BH")) |>
+  dplyr::select(group1, group2, n1, statistic, p, p.Holm = p.adj, p.BH) |>
+  mutate(across(c(p, p.Holm, p.BH), ~ num(., digits = 4)))
+
+cat("\nPruebas de rangos con signo por pares\n")
+print(pares_fri_2, width = Inf)
+```
+
+Conclusión:
+Con un nivel de significación $\alpha = 0,05$, la prueba ómnibus de Friedman rechaza la hipótesis nula ($p < 0,05$), indicando que dentro de las mismas instancias al menos una versión del algoritmo tiende a obtener soluciones más cercanas al óptimo que otra. El procedimiento post hoc (tanto con el ajuste de Holm como con el de Benjamini y Hochberg) muestra diferencias estadísticamente significativas entre la versión A y la versión B, y entre la versión A y la versión C, mientras que entre B y C no hay evidencia suficiente de diferencia. En consecuencia, la versión A tiende a encontrar soluciones de mayor calidad que las versiones B y C al resolver las mismas instancias.
+
+
+
+## Pregunta 3 (Método no paramétrico: Prueba de suma de rangos de Wilcoxon)
+
+Para comparar los tiempos de ejecución de las versiones B= 24 y C=23 en muestras independientes donde se incumple la normalidad (en B) y la homogeneidad de varianzas (Fligner y Killeen p < 0,05), se aplica la prueba de suma de rangos de Wilcoxon y se calcula su tamaño del efecto r.
+
+Hipótesis:  
+
+H0: los tiempos de ejecución de las versiones B y C tienen la misma distribución.  
+
+HA: los tiempos de ejecución de una de las versiones tienden a ser mayores que los de la otra.
+
+```{r}
+# Preparar matriz de datos con factor ordenado (Script 10.13 y 10.14)
+datos_int_3 <- muestra_3 |>
+  mutate(
+    Version = factor(version, levels = c("B", "C")),
+    Tiempo = valor
+  )
+
+alfa_3 <- 0.05
+
+# Aplicar la prueba de suma de rangos de Wilcoxon
+prueba_w_3 <- datos_int_3 |>
+  wilcox_test(Tiempo ~ Version, alternative = "two.sided",
+              detailed = TRUE, conf.level = 1 - alfa_3) |>
+  dplyr::select(group1, group2, n1, n2, statistic, p,
+                estimate, conf.low, conf.high) |>
+  mutate(across(c(p, estimate, conf.low, conf.high), ~ num(., digits = 3)))
+
+cat("Prueba de suma de rangos de Wilcoxon\n")
+print(prueba_w_3, width = Inf)
+
+# Calcular el tamaño del efecto
+efecto_w_3 <- datos_int_3 |>
+  wilcox_effsize(Tiempo ~ Version) |>
+  mutate(effsize = num(effsize, digits = 3))
+
+cat("\nTamaño del efecto\n")
+print(efecto_w_3)
+```
+
+Conclusión:
+Con un nivel de significación $\alpha = 0,05$, se rechaza la hipótesis nula (p < 0,05), por lo que existe evidencia suficiente para afirmar que los tiempos de ejecución de B tienden a ser mayores que C. Como la prueba de Fligner y Killeen vista en el Avance 1 muestra evidencia de que las dispersiones difieren entre ambos grupos, esta conclusión se interpreta en términos de dominancia estocástica (los tiempos de B tienden a superar a los de C) y la estimación de Hodges y Lehmann (estimate) no debe leerse directamente como la diferencia entre las medianas poblacionales.
+
+
+
+## Pregunta 4 (Método paramétrico con transformación de datos)
+
+Para comparar tiempos de ejecución de las versiones A=16 y B=17 en muestras independientes donde la muestra A presenta asimetría y no cumple la condición de normalidad en la escala original, se aplica una transformación de Box-Cox estimando un único parámetro $\lambda$ conjunto a partir del modelo lineal Tiempo / Version.
+
+```{r}
+# Preparar datos para la transformación (Script 10.9 y 10.10)
+datos_tr_4 <- muestra_4 |>
+  mutate(
+    Version = factor(version, levels = c("A", "B")),
+    Tiempo = valor
+  )
+
+# Estimar un solo lambda de Box-Cox para los dos grupos independientes
+bc_4 <- powerTransform(lm(Tiempo ~ Version, data = datos_tr_4))
+print(round(summary(bc_4)[["result"]], 3))
+```
+
+
+```{r}
+# Extraer límites del intervalo de 95% de confianza de Wald para decidir la transformación
+res_bc_4 <- summary(bc_4)[["result"]]
+lwr_4 <- res_bc_4[1, "Wald Lwr Bnd"]
+upr_4 <- res_bc_4[1, "Wald Upr Bnd"]
+lambda_est_4 <- bc_4[["lambda"]]
+
+# Siguiendo lo visto en la lecrura de Box Cox: si el IC de 95% contiene al 0, se prefiere la
+# transformación logarítmica (Rounded Pwr = 0) porque dejaria llevar la diferencia
+# de vuelta a escala original como razón de medias geométricas. Sino,se usa bcPower con el lambda estimado.
+usa_log_4 <- (lwr_4 <= 0 && upr_4 >= 0)
+
+if (usa_log_4) {
+  datos_tr_4 <- datos_tr_4 |> mutate(Tiempo_tr = log(Tiempo))
+  etiqueta_tr_4 <- "Logaritmo del tiempo"
+} else {
+  datos_tr_4 <- datos_tr_4 |> mutate(Tiempo_tr = bcPower(Tiempo, lambda_est_4))
+  etiqueta_tr_4 <- paste0("Tiempo transformado (Box-Cox, lambda = ", round(lambda_est_4, 3), ")")
+}
+
+# Graficar las distribuciones antes y después de la transformación (Script 10.9)
+h_orig_4 <- gghistogram(datos_tr_4, x = "Tiempo", bins = 7, facet.by = "Version",
+                        color = "steelblue", fill = "steelblue", alpha = 0.7,
+                        xlab = "Tiempo [ms]", ylab = "Frecuencia")
+
+h_tr_4 <- gghistogram(datos_tr_4, x = "Tiempo_tr", bins = 7, facet.by = "Version",
+                      color = "steelblue", fill = "steelblue", alpha = 0.7,
+                      xlab = etiqueta_tr_4, ylab = "Frecuencia")
+
+plot_4 <- ggarrange(h_orig_4, h_tr_4, ncol = 2, nrow = 1, labels = "AUTO",
+                    font.label = list(size = 10, color = "steelblue"))
+print(plot_4)
+```
+
+
+
+```{r (Script 10.11)}
+# Revisar la normalidad de cada grupo y la igualdad de varianzas en la escala transformada
+normalidad_tr_4 <- datos_tr_4 |>
+  group_by(Version) |>
+  shapiro_test(Tiempo_tr) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+
+cat("\nPrueba de Shapiro-Wilk en cada grupo (datos transformados)\n")
+print(normalidad_tr_4)
+
+levene_tr_4 <- datos_tr_4 |>
+  levene_test(Tiempo_tr ~ Version) |>
+  mutate(across(c(statistic, p), ~ num(., digits = 3)))
+
+cat("\nPrueba de Levene (datos transformados)\n")
+print(levene_tr_4)
+```
+
+Hipótesis en la escala transformada:  
+
+H0: las medias de los tiempos transformados de las versiones A y B son iguales ($\mu_{A}^{\prime} = \mu_{B}^{\prime}$), lo que en el caso logarítmico equivale a que la razón entre las medias geométricas en la escala original es igual a 1.  
+
+HA: las medias de los tiempos transformados de las versiones A y B son distintas ($\mu_{A}^{\prime} \neq \mu_{B}^{\prime}$).
+
+```{r}
+# Aplicar la prueba t para muestras independientes en la escala transformada (Script 10.11)
+var_iguales_4 <- levene_tr_4$p >= 0.05
+
+if (usa_log_4) {
+  prueba_tr_4 <- datos_tr_4 |>
+    t_test(Tiempo_tr ~ Version, var.equal = var_iguales_4, detailed = TRUE) |>
+    mutate(
+      razon = exp(estimate),
+      razon_inf = exp(conf.low),
+      razon_sup = exp(conf.high)
+    ) |>
+    dplyr::select(statistic, df, p, razon, razon_inf, razon_sup) |>
+    mutate(across(c(statistic, razon, razon_inf, razon_sup), ~ num(., digits = 3)))
+} else {
+  prueba_tr_4 <- datos_tr_4 |>
+    t_test(Tiempo_tr ~ Version, var.equal = var_iguales_4, detailed = TRUE) |>
+    dplyr::select(statistic, df, p, estimate, conf.low, conf.high) |>
+    mutate(across(c(statistic, estimate, conf.low, conf.high), ~ num(., digits = 3)))
+}
+
+cat("\nPrueba t para muestras independientes (datos transformados)\n")
+print(prueba_tr_4)
+```
+
+Conclusión:
+Tras aplicar transformación sugerida por el método de Box-Cox, la prueba de Shapiro-Wilk en cada grupo no muestra evidencia en contra de la normalidad ($p > 0,05$) y la prueba de Levene respalda la homogeneidad de varianzas en la escala transformada. Al contrastar ambos grupos mediante la prueba t de Student para muestras independientes sobre los datos transformados con un nivel de significación $\alpha = 0,05$, se obtiene un valor $p = `r signif(prueba_tr_4$p, 3)`$. Como $p > 0,05$, no se rechaza la hipótesis nula: no existe evidencia estadística suficiente para afirmar que los tiempos de ejecución de las versiones A y B difieran (ni en sus medias en la escala transformada, ni en sus medias geométricas o medianas en la escala original de milisegundos).

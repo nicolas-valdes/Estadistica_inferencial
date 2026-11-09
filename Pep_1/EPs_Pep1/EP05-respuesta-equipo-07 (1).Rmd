@@ -1,0 +1,221 @@
+---
+title: "EP05-respuesta-equipo-07.Rmd"
+author: "Equipo 07"
+output: html_document
+---
+
+
+## Enlace Conversacion con la IA:
+(en caso de que hayan errores pa abrir el link, la conversación fue enviada como pdf al correo del profesor el jueves 22/10)
+
+https://gemini.google.com/share/d/1ZtoPjSN_RDLVQPfSavsoV-dQRUZT4LLK?usp=drive_link
+
+# Aclaración entrega final 
+
+Leyendo las instrucciones antes de entregar, nos dimos cuenta que la sección de Datos en uvirtual dice "En cada invierno, los días se seleccionaron aleatoriamente, asegurando una distancia de entre 4 y 7 días entre observaciones para que puedan considerarse independientes. "
+
+Esto claramente cambia la forma de ver la pregunta 1, que antes fue analizada con muestras correlacionadas, pero ahora será abordada como con muestras independientes.
+
+## Pregunta 1
+En la estación Las Condes, ¿la concentración diaria promedio de MP2,5 fue la misma en los inviernos de 2018, 2019, 2020, 2022 y 2023? En particular, interesa saber si el invierno de 2020, el de las cuarentenas por la pandemia, se diferenció del promedio de los demás inviernos. Si filtraron bien los datos, deberían obtener: 2018, n = 22 y media 25,91; 2019, n = 21 y media 24,05; 2020, n = 23 y media 18,35; 2022, n = 23 y media 28,91; 2023, n = 25 y media 23,96 [µg/m³N].
+
+Prueba a Ocupar:
+Procedimiento Omnibus: ANOVA para muestras independientes
+
+
+Justificacion: Ya que por cada grupo hay una sola medición
+
+Hipotesis:
+
+$H_0$:: En la estación Las Condes, la concentración diaria promedio de MP2,5 fue la misma en los inviernos de 2018, 2019, 2020, 2022 y 2023.
+
+$H_A$: En la estación Las Condes, la concentración diaria promedio de MP2,5 fue diferente en al menos uno de los inviernos.
+
+Condiciones:
+
+1. Escala: La Variable Dependiente es continua con un cero verdadero
+
+2. Independencia: Las observaciones son elegias aleatoriamente en la poblacion en los distintos años. segun enunciado se puedes considerar que las observaciones son independientes, ya que los días se seleccionaron aleatoriamente, asegurando una distancia de entre 4 y 7 días entre observaciones.
+
+3. Normalidad: Notemos que los p-value son mayores que alfa (0,05) entonces todos tienen una distribucion normal
+
+4. Homocedasticidad: Varianza Iguales, Se verifica aplicando la prueba de Levene ($p > 0,05$).
+
+```{r, message=FALSE, echo=FALSE}
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(DescTools)
+
+datos_ep_05 <- read.csv2("EP05 Datos.csv")
+head(datos_ep_05)
+
+
+# Filtramos por la estacion y los años
+
+datos_filtrados_independientes <- datos_ep_05 |> filter(estacion == "Las Condes" & (invierno == 2018 | invierno == 2019 | invierno == 2020 | invierno == 2022 | invierno == 2023)) |> mutate(invierno = factor(invierno))
+cat("Datos filtrados para la estación Las Condes y los inviernos seleccionados\n")                                        
+print(head(datos_filtrados_independientes))
+
+# Evaluamos las condiciones, tal que sigan las muestras sigan una distribucion normal y Igualdad de Varianzas
+normalidad_p1 <- datos_filtrados_independientes |> group_by(invierno) |> shapiro_test(mp25)
+
+#Mostramos si los datos siguen una distribucion Normal
+cat("\nResultados de la prueba de Shapiro-Wilk para normalidad por invierno\n")
+print(normalidad_p1)
+
+# como p > alfa, no se rechaza la H0
+
+# Varianza
+
+varianzas_p1 <- datos_filtrados_independientes |> levene_test(mp25 ~ invierno)
+cat("\nResultados de la prueba de Levene para igualdad de varianzas por invierno\n")
+print(varianzas_p1)
+
+
+#Ahora aplicamos el procedimiento omnibus para la anova de muestras independientes
+
+anova_muestra_independiente <- datos_filtrados_independientes |> anova_test(mp25 ~ invierno)
+cat("\nResultados de la prueba ANOVA para muestras independientes\n")
+print(anova_muestra_independiente)
+
+# Notemos que el valor de p = 0,035 es menor a alfa lo que indica que en años posiblemente si existe alguna diferencia de media significativa, sospechando la de 2020
+
+# Aplicando el procedimiento post hoc 
+
+# Comparamos el invierno de 2020 con el promedio agrupado de los demás inviernos
+resultado <- t.test(
+  mp25 ~ ifelse(invierno == 2020, "2020", "Resto de años"),
+  data = datos_filtrados_independientes,
+  var.equal = TRUE
+)
+cat("\nResultados de la prueba T para muestras independientes comparando 2020 con el promedio de los demás años\n")
+print(resultado)
+
+# Comparaciones por pares con la corrección de Holm (parte de lo que pide la rúbrica)
+resultado_posthoc <- datos_filtrados_independientes |>
+  pairwise_t_test(
+    mp25 ~ invierno,
+    ref.group = "2020",
+    p.adjust.method = "holm",
+    pool.sd = TRUE
+  )
+cat("\nResultados de las comparaciones por pares con corrección de Holm\n")
+print(resultado_posthoc)
+
+```
+Para evaluar si el invierno de 2020 (año de cuarentenas) presentó diferencias respecto a los demás inviernos en la estación Las Condes, se realizó una prueba t de Student para muestras independientes, comparando la concentración media de MP2.5 de 2020 con el promedio agrupado de los inviernos de 2018, 2019, 2022 y 2023. Los resultados mostraron que la media de 2020 fue de 18,35 µg/m³N, significativamente inferior al promedio de los demás inviernos, de 25,70 µg/m³N (*t*(112) = −2,80; *p* = 0,0061). Además, el ANOVA mostró diferencias estadísticamente significativas entre las medias de los cinco inviernos (*F*(4,109) = 2,682; *p* = 0,035). Las comparaciones post hoc con ajuste de Holm identificaron una diferencia significativa únicamente entre 2020 y 2022 (*p* ajustado = 0,00776); las diferencias entre 2020 y los inviernos de 2018, 2019 y 2023 no fueron significativas tras el ajuste. En conjunto, los resultados indican que la concentración media de MP2.5 durante el invierno de 2020 fue significativamente menor que el promedio agrupado de los demás inviernos, aunque las comparaciones por pares solo evidenciaron una diferencia significativa respecto a 2022.
+
+
+
+
+## Pregunta 2
+En el invierno de 2022, ¿la concentración diaria promedio de MP2,5 fue la misma en las estaciones Parque O'Higgins, Pudahuel y Quilicura? En particular, interesa comparar cada una de las otras estaciones con la de Parque O'Higgins. Si filtraron bien los datos, deberían obtener: Parque O'Higgins, n = 23 y media 43,74; Pudahuel, n = 23 y media 44,17; Quilicura, n = 23 y media 45,00 [µg/m³N].
+
+Prueba a Ocupar:
+Procedimiento Omnibus: ANOVA para muestras independientes.
+
+Procedimiento Post-hoc: Comparaciones por pares mediante prueba t de Student, utilizando la corrección de Bonferroni y estableciendo Parque O'Higgins como grupo de referencia.
+
+Justificación: Por cada grupo hay una sola medición y se busca comparar el promedio de una variable numérica continua (concentración de MP2,5) entre tres grupos ($k=3$). En cuanto al procedimiento post-hoc, la pregunta señala explícitamente que solo interesa comparar cada una de las otras estaciones con la de Parque O'Higgins, es decir hacer un contraste contra un grupo de referencia.
+
+Hipotesis:
+
+$H_0$:En el invierno de 2022, la concentración diaria promedio de MP2,5 fue la misma en las estaciones Parque O'Higgins, Pudahuel y Quilicura.
+
+$H_A$: En el invierno de 2022, la concentración diaria promedio de MP2,5 fue diferente en al menos una de las estaciones.
+
+Condiciones:
+
+1. Escala: La variable Dependiente es continua con un cero verdadero.
+
+2. Independencia: segun enunciado se puedes considerar que las observaciones son independientes, ya que los días se seleccionaron aleatoriamente, asegurando una distancia de entre 4 y 7 días entre observaciones.
+
+3. Normalidad: Se asume que las poblaciones de origen siguen una distribución normal. Esto se verifica visualmente con los gráficos Q-Q y numéricamente en la prueba de Shapiro-Wilk, ya que todos los grupos obtienen un valor $p > 0,05$
+
+4. Homocedasticidad:  Varianza Iguales. Se verifica aplicando la prueba de Levene ($p > 0,05$).
+
+```{r, message=FALSE, echo=FALSE}
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+
+# Filtrado de datos
+datos_filtrados_independientes <- datos_ep_05|>
+  filter(invierno == 2022 & (estacion == "Parque O'Higgins" | estacion == "Pudahuel" | estacion == "Quilicura")) |>
+  mutate(
+    fecha = factor(fecha),
+    estacion = factor(estacion)
+  )
+cat("Datos filtrados para el invierno de 2022 y estaciones seleccionadas\n")
+print(head(datos_filtrados_independientes))
+#verificacion de medias y n
+sumario_estaciones <- datos_filtrados_independientes |>
+  group_by(estacion) |>
+  summarise(
+    n = n(),
+    media = mean(mp25, na.rm = TRUE)
+  )
+cat("\nResumen de medias y tamaños de muestra por estación\n")
+print(sumario_estaciones)
+
+# Gráfico QQ para ver la normalidad visualmente por cada estación
+g1_cor <- ggqqplot(datos_filtrados_independientes, 
+                   x = "mp25",
+                   color = "estacion",
+                   palette = c("steelblue", "steelblue1", "steelblue4"),
+                   xlab = "Cuantil teórico", ylab = "Cuantil observado") + 
+  facet_wrap(~ estacion) + 
+  rremove("legend")
+cat("\nGráfico QQ para verificar normalidad por estación\n")
+print(g1_cor)
+
+# Verificar Normalidad con la prueba de Shapiro-Wilk para cada estación
+normalidad_stats <- datos_filtrados_independientes |>
+  group_by(estacion) |>
+  shapiro_test(mp25)
+cat("\nResultados de la prueba de Shapiro-Wilk para normalidad por estación\n")
+print(normalidad_stats) # Si p > 0.05, la distribución es normal
+
+# Verificar Homocedasticidad
+varianzas_stats <- datos_filtrados_independientes |>
+  levene_test(mp25 ~ estacion)
+cat("\nResultados de la prueba de Levene para homocedasticidad\n")
+print(varianzas_stats) # Si p > 0.05, las varianzas son homogéneas
+
+# Anova para muestras independientes
+resultado_anova <- datos_filtrados_independientes |>
+  anova_test(mp25 ~ estacion)
+cat("\nPrueba Ómnibus ANOVA para muestras independientes\n")
+print(resultado_anova)
+
+
+#Post-hoc: Comparaciones por pares mediante prueba t de Student, utilizando la corrección de Bonferroni y estableciendo Parque O'Higgins como grupo de referencia.
+resultado_posthoc<- datos_filtrados_independientes |>
+  pairwise_t_test(
+    mp25 ~ estacion,
+    ref.group = "Parque O'Higgins",
+    p.adjust.method = "bonferroni"
+  )
+cat("\nResultados del procedimiento post-hoc (comparaciones múltiples)\n")
+print(resultado_posthoc)
+
+# Comparaciones por pares con la corrección de Holm (parte de lo que pide la rúbrica)
+resultado_posthoc_holm <- pairwise.t.test(
+  datos_filtrados_independientes$mp25,
+  datos_filtrados_independientes$estacion,
+  p.adjust.method = "holm",
+  pool.sd = TRUE,
+  paired = FALSE
+)
+cat("\nComparaciones por pares con la corrección de Holm")
+print(resultado_posthoc_holm)
+```
+
+A raiz de los resultados para la prueba de Anova, no correspondería hacer un procedimiento post-hoc, ya que el valor p es mayor a 0.05, lo que indica que no hay diferencias significativas entre las estaciones. Sin embargo, se realizaron las comparaciones por pares para cumplir con la solicitud del enunciado.
+
+En las comparaciones por pares con la corrección de Bonferroni, no se encontraron diferencias estadísticamente significativas entre Parque O'Higgins y Pudahuel, ni entre Parque O'Higgins y Quilicura (p.adj=1).
+
+Por otro lado, al realizar todas las comparaciones por pares con la corrección de Holm, tampoco se encontraron diferencias estadísticamente significativas entre ninguna de las estaciones. Esto coincide con los resultados obtenidos mediante Bonferroni en las dos comparaciones compartidas. La diferencia es que Holm incluye también la comparación entre Pudahuel y Quilicura, además de utilizar un método de ajuste distinto.
+
+En conclusión, con un nivel de significación de 0,05, no se encontró evidencia estadísticamente significativa de diferencias en la concentración diaria promedio de MP2,5 durante el invierno de 2022 entre las estaciones Parque O'Higgins, Pudahuel y Quilicura.

@@ -1,0 +1,358 @@
+---
+title: "EP03-respuesta-equipo-07"
+output: html_document
+date: "2026-10-08"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(dplyr)
+library(ggpattern)
+library(ggpubr)
+library(pwr)
+
+```
+
+**Pregunta 1:** 
+
+El jefe de calidad rechazará que el calibre medio es 28 mm si la media de la muestra es menor que 27,62 mm o mayor que 28,38 mm. Supongan que el verdadero calibre medio es 28,55 mm. Hagan un gráfico con las dos distribuciones muestrales, la hipotética y la verdadera, y marquen y calculen α y β. ¿Qué significa, para la exportadora, cometer un error de tipo II en este caso?
+
+**Hipótesis:**
+
+  * Hipótesis nula ($H_0$): El calibre medio poblacional de las cerezas es igual a 28 mm.
+  * Hipótesis alternativa ($H_A$): El calibre medio poblacional de las cerezas es distinto de 28 mm.
+
+**matemáticamente:**
+  * $H_0: \mu = 28$
+  * $H_A: \mu \neq 28$
+  
+Partiremos graficando la distribución muestral
+
+```{r, echo=FALSE}
+# Definimos los datos a usar para graficar
+n <- 100
+media_verdadera <- 28.55
+media_nula <- 28
+sigma <- 2
+delta <- media_nula - media_verdadera
+
+SE <- sigma / sqrt(n)
+
+# Grafico Base
+g_x_limites <- c(27, 29.5)
+g <- ggplot() + xlim(g_x_limites) + ylim(c(0, 2.3))
+g <- g + labs(title = "Distribución muestral de las medias")
+g <- g + labs(x = "Calibre medio [mm]", y = "Densidad")
+g <- g + theme_pubr()
+
+# Agregamos la hipótesis nula
+dist_0 <- stat_function(fun = dnorm, geom = "area",
+                        args = list(mean = media_nula, sd = SE),
+                        colour = "steelblue4", fill = "steelblue4", alpha = 0.2)
+g1 <- g + dist_0
+print(g1)
+```
+
+Una vez graficada la distribución muestral, agregamos las regiones críticas
+
+```{r, echo=FALSE}
+# Marcamos las regiones críticas bajo la hipótesis nula
+z_critico_inferior <- 27.62
+z_critico_superior <- 28.38
+
+g2 <- g1 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "steelblue4", alpha = 0.4)
+g2 <- g2 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "steelblue4", alpha = 0.4)
+print(g2)
+```
+
+Luego agregamos la distribución real y mostramos el tamaño del efecto
+
+```{r, echo=FALSE}
+# Agregar la verdadera distribución muestral de las medias
+dist_v <- stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         colour = "steelblue1", fill = "steelblue1", alpha = 0.2)
+
+g3 <- g2 + dist_v
+
+# Agregar segmentos verticales de ambas medias
+g3 <- g3 + annotate("segment",
+                    x = media_nula, y = 0,
+                    xend = media_nula,
+                    yend = dnorm(media_nula, mean = media_nula, sd = SE) + 0.05,
+                    colour = "steelblue4")
+
+g3 <- g3 + annotate("segment",
+                    x = media_verdadera, y = 0,
+                    xend = media_verdadera,
+                    yend = dnorm(media_verdadera, mean = media_verdadera, sd = SE) + 0.05,
+                    colour = "steelblue1")
+
+# Agregar anotación del tamaño del efecto y mostrar el gráfico que resulta
+x_ann <- c(media_verdadera, media_nula)
+y_ann <- c(dnorm(media_verdadera, mean = media_verdadera, sd = SE),
+           dnorm(media_nula, mean = media_nula, sd = SE))
+y_ann <- y_ann + 0.05
+
+g4 <- g3 + annotate("segment", x = x_ann[1], y = y_ann[1],
+                    xend = x_ann[2], yend = y_ann[2],
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "both", type = "open"))
+g4 <- g4 + annotate("text", x = sum(x_ann) / 2, y = y_ann[1] + 0.1,
+                    label = "delta", vjust = "top", parse = TRUE)
+print(g4)
+```
+
+Finalmente, mostramos alpha y beta en el gráfico
+
+```{r, echo=FALSE}
+# Traspasar las regiones críticas a la verdadera distribución muestral de las medias
+g5 <- g + dist_0 + dist_v
+g5 <- g5 + annotate("segment",
+                    x = media_nula, y = 0,
+                    xend = media_nula,
+                    yend = dnorm(media_nula, mean = media_nula, sd = SE) + 0.05,
+                    colour = "steelblue4")
+g5 <- g5 + annotate("segment",
+                    x = media_verdadera, y = 0,
+                    xend = media_verdadera,
+                    yend = dnorm(media_verdadera, mean = media_verdadera, sd = SE) + 0.05,
+                    colour = "steelblue1")
+
+# Regiones de corte (alfa)
+g5 <- g5 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "steelblue4", alpha = 0.6)
+g5 <- g5 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_nula, sd = SE),
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "steelblue4", alpha = 0.6)
+
+# Regiones del poder
+g5 <- g5 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         xlim = c(g_x_limites[1], z_critico_inferior),
+                         fill = "steelblue1", alpha = 0.3)
+g5 <- g5 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         xlim = c(z_critico_superior, g_x_limites[2]),
+                         fill = "steelblue1", alpha = 0.3)
+
+# Región de error tipo II (beta)
+g5 <- g5 + stat_function(fun = dnorm, geom = "area",
+                         args = list(mean = media_verdadera, sd = SE),
+                         xlim = c(z_critico_inferior, z_critico_superior),
+                         fill = "orange", alpha = 0.4)
+
+# Agregar anotaciones con coordenadas adaptadas a los valores de las cerezas
+g5 <- g5 + annotate("text", x = 27.4, y = 0.4, label = "alpha[inf]",
+                    vjust = "top", parse = TRUE)
+g5 <- g5 + annotate("text", x = 28.8, y = 0.6, label = "alpha[sup]",
+                    vjust = "top", parse = TRUE)
+g5 <- g5 + annotate("text", x = 28.2, y = 0.8,
+                    label = "beta", vjust = "top", parse = TRUE)
+
+g5 <- g5 + annotate("segment", x = 27.4, y = 0.3, xend = 27.5, yend = 0.05,
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "last", type = "open"))
+g5 <- g5 + annotate("segment", x = 28.8, y = 0.5, xend = 28.42, yend = 0.12,
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "last", type = "open"))
+g5 <- g5 + annotate("segment", x = 28.2, y = 0.7, xend = 28.3, yend = 0.35,
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "last", type = "open"))
+
+# Señalar el poder de la prueba
+g5 <- g5 + annotate("text", x = 29.15, y = 1.1,
+                    label = "1-beta", parse = TRUE)
+
+g5 <- g5 + annotate("segment",
+                    x = 29.15, y = 1.0,
+                    xend = 29.0, yend = 0.35,
+                    arrow = arrow(angle = 10, length = unit(0.03, "npc"),
+                                  ends = "last", type = "open"))
+
+print(g5)
+
+# Calcular alfa
+alfa_inf <- pnorm(z_critico_inferior, mean = media_nula, sd = SE, lower.tail = TRUE)
+alfa_sup <- pnorm(z_critico_superior, mean = media_nula, sd = SE, lower.tail = FALSE)
+alfa <- alfa_inf + alfa_sup
+cat("Alfa = ", alfa, "\n")
+
+# Calcular el poder
+poder_inf <- pnorm(z_critico_inferior, mean = media_verdadera, sd = SE, lower.tail = TRUE)
+poder_sup <- pnorm(z_critico_superior, mean = media_verdadera, sd = SE, lower.tail = FALSE)
+poder <- poder_inf + poder_sup
+cat("Poder = ", poder, "\n")
+
+#probabilidad de cometer un error tipo II
+beta <- 1 - poder
+cat("Beta = ", beta, "\n")
+```
+
+Se debe aclarar que el poder inferior existe, pero es prácticamente cero para \(\mu\) = 28,55.
+
+Cometer un error de tipo II en este caso significa no rechazar la hipótesis nula cuando es falsa, es decir, la exportadora concluye que el calibre medio de las cerezas sigue siendo 28 mm cuando en realidad la producción tiene un calibre superior de 28,55 mm. Por lo tanto, la exportadora no detecta la diferencia real y terminaría exportando la fruta con un calibre equivocado.
+
+
+
+**Pregunta 2:**
+
+Hagan el gráfico del poder de esta prueba suponiendo que el verdadero calibre medio puede ir de 27 a 29 mm. ¿Cuánto vale el poder cuando el calibre medio es exactamente 28 mm? ¿Por qué?
+
+Estableciendo las hipotesis 
+
+H0: \(\mu\) = 28 mm. El calibre medio poblacional de las cerezas es igual a 28 mm.
+
+HA: \(\mu\) != 28 mm. El calibre medio poblacional de las cerezas es distinto de 28 mm.
+
+
+```{r, echo = FALSE}
+
+#Secuencia de el verdadero calibre medio, de 27 a 29 mm
+medias_v <- seq(27, 29, length.out = 200)
+
+# Funcion del calculo de poder asociado a las medidas
+calculo_de_poder <- function(media_verdadera){
+  poder_inf <- pnorm(z_critico_inferior, mean = media_verdadera, sd = SE, lower.tail = TRUE)
+  poder_sup <- pnorm(z_critico_superior, mean = media_verdadera, sd = SE, lower.tail = FALSE)
+  
+  return(poder_inf + poder_sup)
+}
+
+# Mostramos el poder
+cat("Poder =", calculo_de_poder(media_verdadera), "\n")
+
+
+# Le aplicamos el calculo del poder a cada una de mas medias de la secuencia declarada anterioremente
+
+poder_calculado <- sapply(medias_v, calculo_de_poder)
+
+
+# Graficamos la curva de poder
+
+df_poder <- data.frame(calibre = medias_v, poder = poder_calculado)
+
+grafico_curva_de_poder <- function(datos) {
+  grafico_poder <- ggplot(datos, aes(x = calibre, y = poder)) +
+    geom_line(color = "steelblue1", linewidth = 1.2) +
+    geom_vline(xintercept = media_nula, linetype = "dashed", color = "tomato") +
+    geom_point(aes(x = media_nula, y = calculo_de_poder(media_nula)), color = "tomato", size = 3) +
+    labs(title = "Curva de Poder de la Prueba",
+         x = "Verdadero Calibre Medio [mm]",
+         y = "Poder de la Prueba (1 - \u03B2)") +
+    theme_pubr()
+  
+  return(grafico_poder)
+}
+
+
+g_poder <- grafico_curva_de_poder(df_poder)
+print(g_poder)
+
+# Ahora obtenemos el poder cuando el calibre medio es exactamente de 28 mm
+
+poder_28_mm <- calculo_de_poder(28)
+cat("Poder cuando el calibre medio es exatamente de 28 mm: ", poder_28_mm, "\n")
+
+
+```
+
+Notemos que el poder del calibre medio cuando es exactamente de 28 mm es de 0,05743312.
+
+Recordemos que el poder se define como "La probabilidad de rechazar la hipotesis  nula de H0 dados los limites criticos establecidos". Si el verdadero calibre medio es igual a la medida propuesta H0 = 28 mm, rechaza H0 ya no es una decision correcta, sino un error de tipo 1 que seria rechazar la hipotesis nula que es verdadera. Por lo tanto, calcular la probabilidad de caer en una zona de rechazo cuando μ = 28 es matematicamente identico que calcular el valor de  α.
+
+
+
+
+**Pregunta 3:**
+
+Si el verdadero calibre medio fuera 28,55 mm, ¿cuántas cerezas habría que medir para tener un poder de 0,7 con α = 0,05?
+
+```{r, echo=FALSE}
+
+media_nula <- 28
+media_verdadera <- 28.55
+sigma <- 2
+alfa <- 0.05
+poder <- 0.70
+
+# Cálculo del tamaño del efecto (d de Cohen normalizado)
+delta <- media_verdadera - media_nula
+delta_normalizado <- delta / sigma
+
+# Estimación del tamaño de muestra (omitiendo n para que la función lo calcule)
+factores <- pwr.norm.test(d = delta_normalizado, 
+                          sig.level = alfa, 
+                          power = poder, 
+                          alternative = "two.sided")
+
+# Mostrar el resultado completo
+print(factores)
+
+# Extraer el número redondeado hacia el entero superior
+n <- ceiling(factores[["n"]])
+cat("n:", n, "\n")
+```
+
+Por lo tanto el numero de cerezas que habría que medir para tener un poder de 0,7 con α = 0,05 es de 82 cerezas.
+
+
+**Pregunta 4:**
+
+El jefe de calidad cree que alrededor del 91 % de las cerezas del huerto tecnificado son de calibre exportable, contra el 82 % del tradicional. Supongan que las cerezas de la pregunta 3 se reparten en partes iguales entre los dos huertos. ¿Alcanza esa muestra para detectar la diferencia que el jefe de calidad cree que hay entre los huertos, con el mismo nivel de significación (0,05) y un poder de al menos 0,8? Si no alcanza, ¿cuántas cerezas de cada huerto harían falta?
+
+Como las cerezas de la pregunta 3 son 82, entonces podemos repartirlas entre los dos huertos, quedando 41 cerezas para cada huerto
+
+Aclaración: Se va a usar una prueba bilateral de dos proporciones independientes, ya que el enunciado pide determinar si la muestra permite detectar una diferencia entre las proporciones de cerezas exportables de ambos huertos, sin indicar explícitamente que se tenga que comprobar que una proporción es mayor que la otra. Por eso se eligió la prueba bilateral, para ver si la muesta permite detectar una posible diferencia que plantea el jefe de calidad.
+
+H0: pt = pr. La proporción poblacional de cerezas de calibre exportable es igual en el huerto tecnificado y en el huerto tradicional.
+
+H1: pt != pr. La proporción poblacional de cerezas de calibre exportable es distinta entre ambos huertos.
+
+(pt = proporción huerto tecnificado, pr = proporción huerto tradicional)
+
+```{r, echo=FALSE}
+
+
+n_cada_huerto <- 41
+alpha <- 0.05
+
+
+
+# Calculamos si con los tamaños de las muestras actuales se puede obtener un poder igual o mayor a 0.8
+factores <- pwr.2p.test(h = ES.h(0.91,0.82), n = n_cada_huerto, sig.level = alpha, alternative = "two.sided")
+
+poder_alcanzable <- factores[["power"]]
+
+print(factores)
+cat("Poder alcanzable con n = 41 por cada muestra: ", poder_alcanzable, "\n")
+
+
+
+```
+
+Podemos ver que el poder alcanzable con 41 cerezas por cada muestra no nos permite tener por lo menos un 0,8 de poder, ya que solo se puede obtener un 0.2269526 de poder, por lo tanto, debemos calcular lo que nos falta para lograr 0,8.
+
+```{r, echo=FALSE}
+
+poder_min <- 0.8
+
+factores <- pwr.2p.test(h = ES.h(0.91,0.82), sig.level = alpha, power = poder_min, alternative = "two.sided")
+
+n_necesario <- ceiling(factores[["n"]])
+
+print(factores)
+cat("Tamaño de las muestras necesario: ", n_necesario, "\n")
+
+```
+
+Es posible ver que el tamaño necesario para obtener como mínimo un poder de al menos 0,8 es 221, por lo tanto faltan 180 (221 - 41) cerezas más en cada muestra para obtener al menos un 0,8 de poder en esta prueba.
+

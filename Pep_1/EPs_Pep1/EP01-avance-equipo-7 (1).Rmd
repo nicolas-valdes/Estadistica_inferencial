@@ -1,0 +1,40 @@
+---
+title: "EP01-avance-equipo-7"
+output: html_document
+date: "2026-09-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r carga-datos, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+casen_rm <- read_csv(
+  "/Users/Matias/Downloads/EP01-Datos-Casen2024-RM.csv",
+  na = c("", "NA"),
+  col_types = cols(
+    folio          = col_character(),
+    provincia      = col_factor(),
+    comuna         = col_factor(),
+    area           = col_factor(),
+    edad           = col_double(),
+    sexo           = col_factor(),
+    ecivil         = col_factor(),
+    nivel_educ     = col_factor(),
+    h_trab_sem     = col_double(),
+    tipo_trab      = col_factor(),
+    ing_aut_hogar  = col_double(),
+    num_pers_hogar = col_double()
+  )
+)
+
+glimpse(casen_rm)
+```
+
+Usaremos las variables edad y sexo. edad es una variable numérica que indica los años de la jefa o jefe de hogar. sexo es una variable categórica con las categorías Hombre y Mujer, que nos permitirá comparar sus edades. No utilizaremos las demás variables porque no son necesarias para responder directamente la pregunta.
+
+Calcularemos la mediana y la media de edad de hombres y mujeres. Usaremos un diagrama de cajas para comparar sus edades.
+Si las edades son distintas, esperamos observar medianas diferentes y cajas a distintas alturas. Si no son distintas, las medianas serán parecidas y las cajas se superpondrán ampliamente.

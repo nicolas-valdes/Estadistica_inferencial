@@ -1,0 +1,360 @@
+---
+title: "EP04-respuesta-equipo-07"
+output: html_document
+date: "2026-10-15"
+---
+
+
+# Pregunta 1
+Una organización de conservación de la fauna silvestre estudia manadas de tres tipos de animales herbívoros en reservas naturales africanas. Se seleccionaron aleatoriamente 30 animales distintos de cada una de las reservas Etosha y Mahago, y se registró su especie. Se registraron 4 elefantes, 4 antílopes y 22 cebras en la primera, y 14 elefantes, 8 antílopes y 8 cebras en la segunda
+¿Existe evidencia de que la proporción de especies es la misma en ambas reservas?
+
+La prueba elegida es:
+Prueba Chi Cuadrado, ya que tenemos 2 poblaciones, para verificar de que ambas proporciones sean la misma se ocupara esta prueba
+
+Hipotesis:
+
+$H_0$: Las reservas Etosha y Mahago presentan las mismas proporciones para cada una de las especies de animales herbívoros (elefantes, antílopes y cebras).
+
+$H_A$: Al menos una de las especies de animales herbívoros presenta una proporción distinta entre las reservas Etosha y Mahago.
+
+Condiciones:
+Las observaciones sean independientes entre si, ya que de ambas reservas se sacó una muestra aleatoria de 30 animales
+Y las observaciones esperadas son mayores o iguales a 5
+
+```{r}
+library(dplyr)
+library(rcompanion)
+library(RVAideMemoire)
+library(tidyr)
+
+
+
+# Las reservas asociadas observadas por la reserva son:
+
+library(dplyr)
+library(rcompanion)
+library(RVAideMemoire)
+library(tidyr)
+
+
+
+# Las reservas asociadas observadas por la reserva son:
+
+reserva_1 <- c(4,4,22) # Etosha
+reserva_2 <- c(14,8,8) # Mahago
+tabla <- as.table(rbind(reserva_1, reserva_2))
+dimnames(tabla) <- list(reserva = c("Etosha", "Mahago"), especies = c("Elefantes", "Antilopes", "Cebras"))
+tabla
+
+# Definimos condiciones y el nivel de significación
+minima_frec_esperada <- 5
+alpha <- 0.05
+
+
+# Obtener las frecuencias esperadas (Codigo obtenido de las lecturas)
+sumas_filas <- apply(tabla, 1, sum)
+sumas_columnas <- apply(tabla, 2, sum)
+suma_total <- sum(tabla)
+
+esperadas <- outer(sumas_filas, sumas_columnas, "*") / suma_total
+esperadas <- round(esperadas, 1)
+dimnames(esperadas) <- dimnames(tabla)
+cat("\n Frecuencia Esperadas: \n")
+print(esperadas)
+
+# Ejecutamos la prueba Chi-cuadrado de homogeniedad
+chi_cuadrado_homogeniedad <- function(tabla){
+  prueba_chi <- chisq.test(tabla)
+  return(prueba_chi)
+}
+
+print(chi_cuadrado_homogeniedad(tabla))
+```
+
+Conclusion:
+Notemos que todas las frecuencias esperadas (9, 6 y 15) son mayores que 5, por lo que se cumplen las condiciones para aplicar la prueba. Dado que el valor de p = 0.001217 es menor que el nivel de significancia α = 0.05, se rechaza la hipótesis nula a favor de la hipótesis alternativa. Por lo tanto, existe evidencia estadísticamente significativa para concluir, con un 95 % de confianza, que la proporción de especies herbívoras no es la misma en las reservas Etosha y Mahago.
+
+Prueba Post Hoc:
+Dado que la prueba Chi-cuadrado de homogeneidad es una prueba ómnibus y se rechazó la hipótesis nula (p = 0.001217 < 0.05), sabemos que las proporciones no son iguales en ambas reservas, pero la prueba no nos indica entre cuáles de las tres especies se producen estas diferencias. Por lo tanto, es necesario realizar un procedimiento post-hoc comparando las especies por pares y ajustando los valores p para encontrar dónde están las diferencias sin aumentar el error de Tipo I.
+
+```{r, warning=FALSE}
+# Realizar procedimiento post-hoc si corresponde
+if(chi_cuadrado_homogeniedad(tabla)[["p.value"]] < alpha) {
+  cat("\nProcedimiento post-hoc:\n")
+  cat("=======================\n\n")
+  
+  # Obtener los pares de especies (columnas)
+  pares <- t(combn(colnames(tabla), 2))
+  N <- nrow(pares)
+  
+  # Obtener las pruebas post-hoc chi-cuadrado por pares
+  pruebas_ph <- sapply(1:N, function(i) chisq.test(tabla[, pares[i, ]], 
+                                                   correct = FALSE), 
+                       simplify = FALSE)
+  
+  # Identificar si alguna sub-tabla no cumple la condición de frecuencia esperada >= 5
+  i_no <- which(sapply(1:N, function(i) min(pruebas_ph[[i]][["expected"]]) < minima_frec_esperada))
+  
+  # Cambiar a prueba exacta de Fisher si no se cumplen las condiciones
+  if(length(i_no) > 0) {
+    pruebas_ph[i_no] <- sapply(i_no, function(i) fisher.test(tabla[, pares[i, ]]), 
+                               simplify = FALSE)
+  }
+  
+  # Preparar tabla con el resumen de resultados
+  nombre_ph <- rep("Chi cuadrado", N)
+  nombre_ph[i_no] <- "Ex. de Fisher"
+  
+  estadistico <- sapply(1:N, function(i) pruebas_ph[[i]][["statistic"]])
+  estadistico[i_no] <- sapply(i_no, function(i) pruebas_ph[[i]][["estimate"]])
+  estadistico <- round(unlist(estadistico), 2)
+  
+  p_val <- sapply(1:N, function(i) pruebas_ph[[i]][["p.value"]])
+  p_adj_h <- p.adjust(p_val, method = "holm")
+  p_adj_by <- p.adjust(p_val, method = "BY")
+  
+  sig_h <- ifelse(p_adj_h < alpha, "*", " ")
+  sig_by <- ifelse(p_adj_by < alpha, "*", " ")
+  
+  resultados <- data.frame(pares[, 1], pares[, 2], nombre_ph, estadistico,
+                           p_val, p_adj_h, sig_h, p_adj_by, sig_by)
+  colnames(resultados) <- c("Especie 1", "Especie 2", "Prueba", "Estadístico", 
+                            "Valor p", "P.adj_Holm", "", "P.adj_BY", "")
+  
+  # Mostrar resumen de resultados
+  print(resultados, digits = 3, row.names = FALSE)
+}
+```
+Al realizar el procedimiento post-hoc para comparar las proporciones por pares de especies, el análisis detectó sub-tablas con frecuencias esperadas menores a 5, por lo que se aplicó la prueba exacta de Fisher en dichos casos y Chi-cuadrado en el restante. Ajustando los valores p mediante el método de Holm para controlar el error de Tipo I, se observa que la única diferencia estadísticamente significativa se da al comparar la proporción de Cebras frente a la de Elefantes (P.adj_Holm = 0.00174 < 0.05). Las diferencias entre Elefantes-Antílopes y Antílopes-Cebras no resultaron significativas. En conclusión, con un 95% de confianza, la diferencia global detectada entre las reservas Etosha y Mahago se debe exclusivamente a la distinta distribución relativa entre elefantes y cebras.
+
+# Pregunta 2
+En otro planeta se realiza un estudio sobre la preferencia de hábitat de dos especies de alienígenas. Después de observar durante meses a 9 alienígenas de la especie EA14012-A, elegidos al azar en distintas regiones, y a 15 de la especie EA14013-B, todos de la única colonia de esa especie que se conoce, se ha determinado que 3 alienígenas de la primera y 11 de la segunda prefieren hábitats acuáticos, mientras los demás prefieren hábitats subterráneos. ¿Existe relación entre las especies alienígenas y elegir hábitats subterráneos o hábitats acuáticos?
+
+
+Prueba:
+Prueba exacta de Fisher, ya que permite analizar la asociacion entre dos variables dicotomicas
+
+Hipotesis:
+
+$H_0$: las variables especies y habitat son independientes.
+
+$H_A$: las variables especies y habitat estan relacionadas.
+
+Condiciones (previo a la pregunta incógnita):
+La Muestra debe de ser pequeña
+Son dos variables binarias, entonces se forma una tabla de 2x2
+Las variables son independientes, ya que suponemos que la eleccion de una especie no afecta la elección de la otra, por lo tanto son independientes
+```{r}
+# Construir los datos y la tabla de contingencia
+
+# Correccion de calculos
+
+# " EA14012-A" (9 en total) : 3 acuaticos y 6 subterraneos
+# " EA14013-B" (15 en total) : 11 acuaticos y 4 subterraneos
+
+Especie <- c(rep("EA14012-A",9), rep("EA14013-B",15))
+Resultado <- c(rep("acuatico",3), rep("subterraneo",6 ),
+               rep("acuatico",11), rep("subterraneo",4 ))
+
+Resultado <- factor(Resultado, levels = c("acuatico","subterraneo"))
+datos <- data.frame(Resultado, Especie)
+tabla <- xtabs(~ ., datos)
+print(tabla)
+
+#Nivel de Significancia
+alfa <- 0.05
+
+# Aplicar la prueba exacta de Fisher a la tabla de contingencia
+fisher_1 <- fisher.test(tabla, conf.level = 1 - alfa)
+cat("\n")
+cat("Prueba exacta de Fisher usando la tabla de contingencia\n")
+cat("-------------------------------------------------------\n")
+print(fisher_1)
+
+
+```
+
+Conclusión: Si asumieramos el cumplimiento de las condiciones, el valor de p-value = 0.0918 > α. Por lo tanto, no se rechaza $H_0$, concluyendo que no existe evidencia suficiente para afirmar que haya una relacion entre la especie alienigena con su preferencia por habitats acuaticos o subterraneos.
+
+Respuesta Incognita: Estrictamente, al no poder garantizarse la independencia ni la aleatoriedad en la muestra de la especie EA14013-B, los resultados inferenciales no serían plenamente válidos. Para corregir este problema, se debe modificar la recolección de datos de la especie EA14013-B seleccionando a los 15 individuos mediante un muestreo aleatorio simple a partir de distintas regiones o colonias independientes del planeta (o de individuos aislados que no interactúen entre sí).
+
+
+
+
+
+# Pregunta 3
+Un grupo de científicas y científicos está llevando a cabo un experimento para evaluar el crecimiento de plantas en condiciones de tierra sintética. Inicialmente, seleccionaron aleatoriamente 25 plantas de la misma parcela de tierra y registraron su crecimiento. Luego, estas plantas fueron trasladadas a la nueva tierra sintética durante un período de tiempo determinado, y posteriormente se registró nuevamente su crecimiento. Los resultados se presentan a continuación:
+
+7 plantas mostraron un crecimiento bajo tanto en la tierra original como en la tierra sintética.
+5 plantas que mostraron un crecimiento bajo en la tierra original experimentaron un aumento en su crecimiento al ser trasladadas a la tierra sintética.
+6 plantas mantuvieron un alto nivel de crecimiento en ambas condiciones de suelo.
+7 plantas mostraron un alto nivel de crecimiento en la tierra original, pero este disminuyó al ser trasladadas a la tierra sintética.
+
+¿Existe evidencia de que usando tierra sintética haya tenido un efecto significativo en el crecimiento de las plantas?
+
+
+Prueba:
+Se utiliza la prueba de McNemar porque permite determinar si existe una diferencia significativa entre las proporciones de una variable dicotómica medida en dos condiciones relacionadas, considerando los cambios observados en los mismos individuos.
+
+
+Hipotesis:
+
+$H_0$:La proporción poblacional de plantas que pasan de crecimiento bajo a alto es igual a la proporción que pasa de alto a bajo.
+
+
+$H_A$:La proporción poblacional de plantas que pasan de crecimiento bajo a alto es distinta de la proporción que pasa de alto a bajo.
+
+
+Condiciones: 
+
+La variable de respuesta debe ser dicotómica: Se cumple porque el crecimiento se registra como alto o bajo
+
+Observaciones apareadas: Se cumple porque el crecimiento de las mismas plantas se mide en 2 ocasiones,una con la tierra natural y otra con la tierra sintética.
+Independencia entre pares: Se asume que cada observación (planta) es independiente de la otra, ya que fueron elegidas al azar.
+
+Cantidad de cambios suficiente: Se cumple, ya que hay 12 cambios entre ambas mediciones, es decir, $b + c = 5 + 7 = 12 > 10$.
+
+```{r}
+# Construir la tabla de contingencia
+plantas <- seq(1:25)
+tierra_natural <- c("BAJO", "BAJO","BAJO","BAJO","BAJO","BAJO","BAJO", "BAJO", "BAJO", "BAJO", "BAJO", "BAJO",  "ALTO",  "ALTO",  "ALTO", "ALTO", "ALTO", "ALTO", "ALTO", "ALTO", "ALTO", "ALTO", "ALTO", "ALTO", "ALTO")
+tierra_sintetica <- c( "BAJO","BAJO","BAJO","BAJO","BAJO","BAJO","BAJO" , "ALTO",  "ALTO",  "ALTO",  "ALTO",  "ALTO","ALTO", "ALTO", "ALTO", "ALTO", "ALTO", "ALTO","BAJO","BAJO","BAJO","BAJO","BAJO","BAJO","BAJO")
+datos <- data.frame(plantas, tierra_natural, tierra_sintetica)
+tabla <- table(tierra_natural, tierra_sintetica)
+print(tabla)
+
+
+# Aplicar la prueba de McNemar a la tabla y mostrarla
+prueba_1 <- mcnemar.test(tabla, correct = FALSE)
+cat("\nPrueba de McNemar usando la tabla de contingencia:\n")
+cat("-------------------------------------------------")
+print(prueba_1)
+```
+
+Conclusión: La prueba entrega un p-valor de 0.5637, y como este valor es mayor que alpha (0.05), entonces no hay evidencia suficiente para rechazar la hipótesis nula. Por lo tanto, se concluye con un 95% de confianza que no hay evidencia estadística suficiente para decir que el uso de tierra sintética haya producido un cambio significativo en las proporciones de plantas con crecimiento alto y bajo
+
+No corresponde realizar un procedimiento post hoc, porque la prueba de McNemar compara únicamente dos condiciones apareadas y, además, no se rechazó la hipótesis nula.
+
+
+# Pregunta 4
+Una agencia de marketing desea determinar si hay una diferencia significativa en la efectividad de tres estrategias publicitarias utilizadas para promocionar un nuevo producto. Para ello, se ha recopilado información de personas que fueron expuestas a las tres estrategias publicitarias, registrando si mostraron una aceptación (A) o rechazo (R) a cada una de ellas.
+¿Qué puede concluir la agencia de marketing sobre la efectividad de las estrategias publicitarias para promover el nuevo producto?
+Indicación: obtengan la muestra de 50 personas del archivo "EP04 Datos.csv", que se adjunta a esta tarea, usando la semilla 137.
+
+
+Prueba: 
+Prueba Q de Cochran, la variable de repuesta es la aceptacion o rechazo (dicotomica) y la variable independiente son las estrategias utilizadas (1,2 y 3). Se elige esta prueba porque la variable independiente tiene más de dos mediciones apareadas.
+
+Hipotesis:
+
+$H_0$: la proporcion de aceptacion es la misma en todas las estrategias.
+
+$H_A$: la proporcion de aceptacion es distinta en al menos una de las estrategias.
+
+Condiciones:
+
+La variable de respuesta es dicotomica (respuesta es aceptación o rechazo)
+
+La variable independiente es categorica (estrategia utilizada)
+
+Los bloques son independientes entre si. Estamos realizando esta prueba ya que asumimos que la respuesta de una persona no influya en la otra.
+
+El tamaño de la muestra sea suficientemente grande (nk >= 24, donde n es el número de “bloques” en que se organizan las observaciones y k es la cantidad de tratamientos estudiados.)
+
+
+```{r}
+datos_Q_de_Cochran <- read.csv2("EP04 Datos.csv")
+head(datos_Q_de_Cochran)
+
+# Seleccionar aleatoriamente 50 personas
+set.seed(137)
+muestra <- datos_Q_de_Cochran[
+  sample(nrow(datos_Q_de_Cochran), 50),
+]
+
+n <- 50 # Personas
+k <- 3 # Estrategias
+observaciones <- n * k
+observaciones
+
+
+# Crear la matriz de datos
+datos_anchos <- muestra
+
+# A = 1, R = 0
+datos_anchos$estrategia_1 <- ifelse(datos_anchos$estrategia_1 == "A", 1, 0)
+datos_anchos$estrategia_2 <- ifelse(datos_anchos$estrategia_2 == "A", 1, 0)
+datos_anchos$estrategia_3 <- ifelse(datos_anchos$estrategia_3 == "A", 1, 0)
+
+head(datos_anchos)
+
+# Llevar la matriz de datos a formato largo
+datos_largos <- datos_anchos |>
+                pivot_longer(c("estrategia_1", "estrategia_2", "estrategia_3"),
+                             names_to = "estrategia", values_to = "resultado") |>
+                mutate_at(c("id", "estrategia"), as.factor)
+
+# Definir condiciones y el nivel de significación
+minimo_tamaño_muestra <- 24
+alfa <- 0.05
+
+# Calcular el tamaño de la muestra y realizar la prueba Q de Cochran
+N <- nrow(datos_anchos[, -1]) * ncol(datos_anchos[, -1])
+prueba_qc <- cochran.qtest(resultado ~ estrategia | id,
+                           data = datos_largos, alpha = alfa)
+
+# Mostrar el tamaño de la muestra y el resultado de la prueba global
+cat("Prueba ómnibus:\n")
+cat("==============\n")
+cat("Número total de observaciones:", N, " ")
+cat(ifelse(N > minimo_tamaño_muestra, "> ", "<= "))
+cat(minimo_tamaño_muestra, "\n")
+cat("\nResultado de la prueba Q de Cochran:\n")
+cat("-----------------------------------")
+print(prueba_qc)
+```
+Como 150 >= 24 se cumple la condicion de que el tamaño sea lo suficientemente grande.
+
+Como p = 0.003256 < 0.05 entonces se rechaza H0 porque existe evidencia estadística suficiente para decir que las proporciones de aceptación no son iguales entre las tres estrategias.
+
+Como la prueba Q de Cochran es una prueba ómnibus y su resultado fue significativo, hay que hacer un procedimiento post hoc para poder ver entre cuáles estrategias existen diferencias. Para esto, se utilizan pruebas de McNemar sin corrección de continuidad, con ajuste de Holm para las comparaciones múltiples.
+
+```{r}
+# Realizar procedimiento post-hoc si corresponde
+if(prueba_qc[["p.value"]] < alfa)
+{
+  # Aplicar procedimiento post-hoc con corrección de Holm
+  post_hoc_1 <- pairwiseMcnemar(resultado ~ estrategia | id,
+                               data = datos_largos,
+                               test = "mcnemar", correct = FALSE, method = "holm")
+
+  # Aplicar procedimiento post-hoc con corrección de Benjamini y Yekutieli
+  post_hoc_2 <- pairwiseMcnemar(resultado ~ estrategia | id,
+                               data = datos_largos,
+                               test = "mcnemar", correct = FALSE, method = "BY")
+
+  # Mostrar el resultado de los procedimientos post-hoc realizados
+  cat("Procedimiento post-hoc:\n")
+  cat("=======================\n")
+
+  cat("\nProcedimiento post-hoc con ajuste de Holm\n")
+  cat("-----------------------------------------\n")
+  print(post_hoc_1)
+  cat("Procedimiento post-hoc con ajuste Benjamini y Yekutieli\n")
+  cat("-----------------------------------------------------\n")
+  print(post_hoc_2)
+}
+```
+
+
+Con un nivel de significación de 0.05, la prueba q de Cochran dio un valor p = 0.003256, entonces se rechaza la hipótesis nula. Por lo tanto, podemos decir que existe evidencia estadísticamente significativa de diferencias en las proporciones de aceptación de las tres estrategias publicitarias.
+
+
+Como prueba global resultó significativa, se realizó un procedimiento post hoc mediante pruebas de McNemar sin corrección de continuidad, utilizando el ajuste de Holm.
+
+Los resultados muestran diferencias significativas entre las estrategias 1 y 2 (p ajustado = 0.00438) y entre las estrategias 1 y 3 (p ajustado = 0.02860). En cambio, no se encontró evidencia suficiente de una diferencia significativa entre las estrategias 2 y 3 (p ajustado = 0.289).
+
+Las proporciones de aceptación fueron de 28 % para la estrategia 1, 64 % para la estrategia 2 y 52 % para la estrategia 3. Entonces, las estrategias 2 y 3 tuvieron una mayor aceptación que la estrategia 1, mientras que no se pudo establecer una diferencia estadísticamente significativa entre ellas.
+
+Se aplicó el ajuste de Benjamini y Yekutieli como análisis de sensibilidad. Los resultados mantienen las mismas diferencias significativas encontradas con Holm, así que las conclusiones siguen siendo las mismas al usar este ajuste más exigente.
