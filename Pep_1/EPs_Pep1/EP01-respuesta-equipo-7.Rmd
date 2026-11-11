@@ -14,7 +14,7 @@ output: html_document
 library(tidyverse)
 
 casen_rm <- read_csv(
-  "/Users/Matias/Downloads/EP01-Datos-Casen2024-RM.csv",
+  "EP01-Datos-Casen2024-RM.csv",
   na = c("", "NA"),
   col_types = cols(
     folio          = col_character(),
